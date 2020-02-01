@@ -14,7 +14,7 @@ pub struct GuestMemory<'a> {
 
 impl<'a> GuestMemory<'a> {
     pub fn new(ptr: *mut u8, len: u32) -> GuestMemory<'a> {
-        assert_eq!(ptr as usize % 4096, 0, "GuestMemory must be page-aligned");
+        // assert_eq!(ptr as usize % 4096, 0, "GuestMemory must be page-aligned");
         GuestMemory {
             ptr,
             len,
