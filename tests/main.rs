@@ -104,6 +104,26 @@ impl ::memory::GuestErrorType for types::Errno {
     }
 }
 
+#[derive(Debug)]
+#[repr(align(4096))]
+struct HostMemory<'a> {
+    buf: &'a mut [u8],
+}
+
+impl<'a> HostMemory<'a> {
+    pub fn new(buf: &'a mut [u8]) -> Self {
+        Self { buf }
+    }
+
+    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.buf.as_mut_ptr()
+    }
+
+    pub fn len(&self) -> usize {
+        self.buf.len()
+    }
+}
+
 #[test]
 fn bat() {
     let mut ctx = WasiCtx::new();
@@ -113,7 +133,8 @@ fn bat() {
 #[test]
 fn baz() {
     let mut ctx = WasiCtx::new();
-    let host_memory = &mut [0u8; 4096];
+    let raw = &mut [0u8; 4096];
+    let mut host_memory = HostMemory::new(raw);
     let guest_memory = memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
     let sizeof_excuse = std::mem::size_of::<types::Excuse>();
     let padding = 4 - sizeof_excuse % 4;
@@ -158,7 +179,8 @@ fn sum_of_pair() {
 #[test]
 fn sum_of_pair_of_ptrs() {
     let mut ctx = WasiCtx::new();
-    let host_memory = &mut [0u8; 4096];
+    let raw = &mut [0u8; 4096];
+    let mut host_memory = HostMemory::new(raw);
     let guest_memory = memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
     {
         let first_mut: memory::GuestPtrMut<i32> = guest_memory.ptr_mut(0).unwrap();
