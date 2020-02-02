@@ -26,7 +26,7 @@ impl foo::Foo for WasiCtx {
 
     fn baz(
         &mut self,
-        excuse: types::Excuse,
+        _excuse: types::Excuse,
         a_better_excuse_by_reference: ::memory::GuestPtrMut<types::Excuse>,
         a_lamer_excuse_by_reference: ::memory::GuestPtr<types::Excuse>,
         two_layers_of_excuses: ::memory::GuestPtrMut<::memory::GuestPtr<types::Excuse>>,
@@ -37,16 +37,18 @@ impl foo::Foo for WasiCtx {
                 eprintln!("a_better_excuse_by_reference error: {}", e);
                 types::Errno::InvalidArg
             })?;
-        let a_better_excuse: types::Excuse = *a_better_excuse_ref;
+        let _a_better_excuse: types::Excuse = *a_better_excuse_ref;
 
         // Read enum value from immutable ptr:
         let a_lamer_excuse = *a_lamer_excuse_by_reference.as_ref().map_err(|e| {
             eprintln!("a_lamer_excuse_by_reference error: {}", e);
             types::Errno::InvalidArg
         })?;
+        println!("{:?}", a_lamer_excuse);
 
         // Write enum to mutable ptr:
         *a_better_excuse_ref = a_lamer_excuse;
+        println!("{:?}", *a_better_excuse_ref);
 
         // Read ptr value from mutable ptr:
         let one_layer_down: ::memory::GuestPtr<types::Excuse> =
@@ -56,7 +58,7 @@ impl foo::Foo for WasiCtx {
             })?;
 
         // Read enum value from that ptr:
-        let two_layers_down: types::Excuse = *one_layer_down.as_ref().map_err(|e| {
+        let _two_layers_down: types::Excuse = *one_layer_down.as_ref().map_err(|e| {
             eprintln!("two_layers_down error: {}", e);
             types::Errno::InvalidArg
         })?;
@@ -64,10 +66,6 @@ impl foo::Foo for WasiCtx {
         // Write ptr value to mutable ptr:
         two_layers_of_excuses.write_ptr_to_guest(&a_better_excuse_by_reference.as_immut());
 
-        println!(
-            "BAZ: excuse: {:?}, better excuse: {:?}, lamer excuse: {:?}, two layers down: {:?}",
-            excuse, a_better_excuse, a_lamer_excuse, two_layers_down
-        );
         Ok(())
     }
 
@@ -113,6 +111,41 @@ fn bat() {
 }
 
 #[test]
+fn baz() {
+    let mut ctx = WasiCtx::new();
+    let host_memory = &mut [0u8; 4096];
+    let guest_memory = memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+    let sizeof_excuse = std::mem::size_of::<types::Excuse>();
+    let padding = 4 - sizeof_excuse % 4;
+    {
+        let lame_mut: memory::GuestPtrMut<types::Excuse> = guest_memory.ptr_mut(0).unwrap();
+        let mut lame = lame_mut.as_ref_mut().unwrap();
+        *lame = types::Excuse::Sleeping;
+    }
+    let lame: memory::GuestPtr<types::Excuse> = guest_memory
+        .ptr(0)
+        .expect("GuestPtr<types::Excuse> fits in the memory");
+    assert_eq!(*lame.as_ref().unwrap(), types::Excuse::Sleeping);
+    let better: memory::GuestPtrMut<types::Excuse> = guest_memory
+        .ptr_mut((sizeof_excuse + padding) as u32)
+        .expect("GuestPtr<types::Excuse> fits in the memory");
+    let ptr_to_ptr: memory::GuestPtrMut<memory::GuestPtr<types::Excuse>> = guest_memory
+        .ptr_mut((sizeof_excuse + padding) as u32 * 2)
+        .expect("GuestPtr<GuestPtr<_>> fits in the memory");
+    assert!(ctx
+        .baz(
+            types::Excuse::DogAte,
+            better.clone(),
+            lame,
+            ptr_to_ptr.clone()
+        )
+        .is_ok());
+    assert_eq!(*better.as_ref().unwrap(), types::Excuse::Sleeping);
+    let ptr = ptr_to_ptr.read_ptr_from_guest().unwrap();
+    assert_eq!(*ptr.as_ref().unwrap(), types::Excuse::Sleeping);
+}
+
+#[test]
 fn sum_of_pair() {
     let mut ctx = WasiCtx::new();
     let pair = types::PairInts {
@@ -144,4 +177,3 @@ fn sum_of_pair_of_ptrs() {
     let pair = types::PairIntPtrs { first, second };
     assert_eq!(ctx.sum_of_pair_of_ptrs(&pair), Ok(3));
 }
-
