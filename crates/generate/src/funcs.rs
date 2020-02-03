@@ -28,7 +28,7 @@ pub fn define_func(names: &Names, func: &witx::InterfaceFunc) -> TokenStream {
     });
 
     let abi_args = quote!(
-            ctx: &mut #ctx_type, memory: ::memory::GuestMemory,
+            ctx: &mut #ctx_type, memory: &mut ::memory::GuestMemory,
             #(#params),*
     );
     let abi_ret = if let Some(ret) = &coretype.ret {
