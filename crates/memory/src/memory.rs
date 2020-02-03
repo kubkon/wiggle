@@ -373,18 +373,15 @@ where
     T: GuestTypeCopy,
 {
     pub fn as_ref(&'a self) -> Result<&'a [T], GuestError> {
-        // FIXME FIXME FIXME
-        // OK, this is some terrible, black magic, voodoo hack
-        // I sincerely hope there is a better way of doing this!
-        let mut out = vec![];
+        // First, validate
         for i in 0..self.num_elems {
             let ptr = self.ptr.elem(i as i32)?;
             T::validate(&ptr)?;
-            let el = ptr.as_ref()?;
-            out.push(*el);
         }
-        let raw = Box::into_raw(out.into_boxed_slice());
-        Ok(unsafe { std::slice::from_raw_parts(raw as *const _, self.num_elems as usize) })
+        // Then, extract as slice
+        Ok(unsafe {
+            std::slice::from_raw_parts(self.ptr.as_raw() as *const T, self.num_elems as usize)
+        })
     }
 }
 
