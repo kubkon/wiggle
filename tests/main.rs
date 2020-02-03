@@ -25,48 +25,48 @@ impl foo::Foo for WasiCtx {
 
     fn baz(
         &mut self,
-        excuse: types::Excuse,
-        a_better_excuse_by_reference: ::memory::GuestPtrMut<types::Excuse>,
-        a_lamer_excuse_by_reference: ::memory::GuestPtr<types::Excuse>,
-        two_layers_of_excuses: ::memory::GuestPtrMut<::memory::GuestPtr<types::Excuse>>,
+        input1: types::Excuse,
+        input2_ptr: ::memory::GuestPtrMut<types::Excuse>,
+        input3_ptr: ::memory::GuestPtr<types::Excuse>,
+        input4_ptr_ptr: ::memory::GuestPtrMut<::memory::GuestPtr<types::Excuse>>,
     ) -> Result<(), types::Errno> {
-        println!("BAZ excuse {:?}", excuse);
+        println!("BAZ input1 {:?}", input1);
         // Read enum value from mutable:
-        let mut a_better_excuse_ref: ::memory::GuestRefMut<types::Excuse> =
-            a_better_excuse_by_reference.as_ref_mut().map_err(|e| {
-                eprintln!("a_better_excuse_by_reference error: {}", e);
+        let mut input2_ref: ::memory::GuestRefMut<types::Excuse> =
+            input2_ptr.as_ref_mut().map_err(|e| {
+                eprintln!("input2_ptr error: {}", e);
                 types::Errno::InvalidArg
             })?;
-        let a_better_excuse: types::Excuse = *a_better_excuse_ref;
-        println!("a_better_excuse {:?}", a_better_excuse);
+        let input2: types::Excuse = *input2_ref;
+        println!("input2 {:?}", input2);
 
         // Read enum value from immutable ptr:
-        let a_lamer_excuse = *a_lamer_excuse_by_reference.as_ref().map_err(|e| {
-            eprintln!("a_lamer_excuse_by_reference error: {}", e);
+        let input3 = *input3_ptr.as_ref().map_err(|e| {
+            eprintln!("input3_ptr error: {}", e);
             types::Errno::InvalidArg
         })?;
-        println!("a_lamer_excuse {:?}", a_lamer_excuse);
+        println!("input3 {:?}", input3);
 
         // Write enum to mutable ptr:
-        *a_better_excuse_ref = a_lamer_excuse;
-        println!("wrote to a_better_excuse_ref {:?}", *a_better_excuse_ref);
+        *input2_ref = input3;
+        println!("wrote to input2_ref {:?}", input3);
 
         // Read ptr value from mutable ptr:
-        let one_layer_down: ::memory::GuestPtr<types::Excuse> =
-            two_layers_of_excuses.read_ptr_from_guest().map_err(|e| {
-                eprintln!("one_layer_down error: {}", e);
+        let input4_ptr: ::memory::GuestPtr<types::Excuse> =
+            input4_ptr_ptr.read_ptr_from_guest().map_err(|e| {
+                eprintln!("input4_ptr_ptr error: {}", e);
                 types::Errno::InvalidArg
             })?;
 
         // Read enum value from that ptr:
-        let two_layers_down: types::Excuse = *one_layer_down.as_ref().map_err(|e| {
-            eprintln!("two_layers_down error: {}", e);
+        let input4: types::Excuse = *input4_ptr.as_ref().map_err(|e| {
+            eprintln!("input4_ptr error: {}", e);
             types::Errno::InvalidArg
         })?;
-        println!("two layers down {:?}", two_layers_down);
+        println!("input4 {:?}", input4);
 
         // Write ptr value to mutable ptr:
-        two_layers_of_excuses.write_ptr_to_guest(&a_better_excuse_by_reference.as_immut());
+        input4_ptr_ptr.write_ptr_to_guest(&input2_ptr.as_immut());
 
         Ok(())
     }
