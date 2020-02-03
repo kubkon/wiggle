@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  rustfmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install Rust
+      run: |
+        rustup update stable --no-self-update
+        rustup default stable
+        rustup component add rustfmt
+    - name: Cargo fmt
+      run: cargo fmt --all -- --check
+
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu, macOS, windows]
+
+    steps:
+    - uses: actions/checkout@v1
+      with:
+        submodules: true
+    - name: Install Rust
+      shell: bash
+      run: |
+        rustup update stable
+        rustup default stable
+      # if: matrix.os != 'macos-latest'
+    # - name: Install Rust (macOS)
+      # run: |
+      #   curl https://sh.rustup.rs | sh -s -- -y
+      #   echo "##[add-path]$HOME/.cargo/bin"
+      # if: matrix.os == 'macos-latest'
+    - name: Build
+      run: cargo build --all --release -vv
+
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu, macOS, windows]
+
+    steps:
+    - uses: actions/checkout@v1
+      with:
+        submodules: true
+    - name: Install Rust
+      shell: bash
+      run: |
+        rustup update stable --no-self-update 
+        rustup default stable
+      if: matrix.os != 'macos-latest'
+    - name: Install Rust (macOS)
+      run: |
+        curl https://sh.rustup.rs | sh -s -- -y
+        echo "##[add-path]$HOME/.cargo/bin"
+      if: matrix.os == 'macos-latest'
+    - name: Build
+      run: cargo test --all --release -vv
