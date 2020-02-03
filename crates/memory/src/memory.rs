@@ -359,3 +359,26 @@ impl<'a, T> Drop for GuestRefMut<'a, T> {
         borrows.unborrow_mut(self.handle);
     }
 }
+
+pub struct GuestArray<'a, T>
+where
+    T: GuestType,
+{
+    ptr: GuestPtr<'a, T>,
+    num_elems: u32,
+}
+
+impl<'a, T> GuestArray<'a, T>
+where
+    T: GuestTypeCopy,
+{
+    pub fn as_ref(&'a self) -> Result<Vec<GuestRef<'a, T>>, GuestError> {
+        let mut out = vec![];
+        for i in 0..self.num_elems {
+            let ptr = self.ptr.elem(i as i32)?;
+            T::validate(&ptr)?;
+            out.push(ptr.as_ref()?);
+        }
+        Ok(out)
+    }
+}
