@@ -1,3 +1,5 @@
+use memory::GuestRef;
+
 generate::from_witx!({
     witx: ["tests/test.witx"],
     ctx: WasiCtx,
@@ -25,29 +27,31 @@ impl foo::Foo for WasiCtx {
 
     fn baz(
         &mut self,
-        _excuse: types::Excuse,
+        excuse: types::Excuse,
         a_better_excuse_by_reference: ::memory::GuestPtrMut<types::Excuse>,
         a_lamer_excuse_by_reference: ::memory::GuestPtr<types::Excuse>,
         two_layers_of_excuses: ::memory::GuestPtrMut<::memory::GuestPtr<types::Excuse>>,
     ) -> Result<(), types::Errno> {
+        println!("BAZ excuse {:?}", excuse);
         // Read enum value from mutable:
         let mut a_better_excuse_ref: ::memory::GuestRefMut<types::Excuse> =
             a_better_excuse_by_reference.as_ref_mut().map_err(|e| {
                 eprintln!("a_better_excuse_by_reference error: {}", e);
                 types::Errno::InvalidArg
             })?;
-        let _a_better_excuse: types::Excuse = *a_better_excuse_ref;
+        let a_better_excuse: types::Excuse = *a_better_excuse_ref;
+        println!("a_better_excuse {:?}", a_better_excuse);
 
         // Read enum value from immutable ptr:
         let a_lamer_excuse = *a_lamer_excuse_by_reference.as_ref().map_err(|e| {
             eprintln!("a_lamer_excuse_by_reference error: {}", e);
             types::Errno::InvalidArg
         })?;
-        println!("{:?}", a_lamer_excuse);
+        println!("a_lamer_excuse {:?}", a_lamer_excuse);
 
         // Write enum to mutable ptr:
         *a_better_excuse_ref = a_lamer_excuse;
-        println!("{:?}", *a_better_excuse_ref);
+        println!("wrote to a_better_excuse_ref {:?}", *a_better_excuse_ref);
 
         // Read ptr value from mutable ptr:
         let one_layer_down: ::memory::GuestPtr<types::Excuse> =
@@ -57,10 +61,11 @@ impl foo::Foo for WasiCtx {
             })?;
 
         // Read enum value from that ptr:
-        let _two_layers_down: types::Excuse = *one_layer_down.as_ref().map_err(|e| {
+        let two_layers_down: types::Excuse = *one_layer_down.as_ref().map_err(|e| {
             eprintln!("two_layers_down error: {}", e);
             types::Errno::InvalidArg
         })?;
+        println!("two layers down {:?}", two_layers_down);
 
         // Write ptr value to mutable ptr:
         two_layers_of_excuses.write_ptr_to_guest(&a_better_excuse_by_reference.as_immut());
@@ -130,42 +135,91 @@ fn hostmemory_is_aligned() {
 #[test]
 fn bat() {
     let mut ctx = WasiCtx::new();
-    assert_eq!(ctx.bat(2), Ok(4.0));
+    let mut host_memory = HostMemory::new();
+    let mut guest_memory =
+        memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+
+    let input = 2;
+    let return_loc = 0;
+
+    let bat_err = foo::bat(&mut ctx, &mut guest_memory, input, return_loc);
+
+    let return_val: GuestRef<f32> = guest_memory
+        .ptr(return_loc as u32)
+        .expect("return loc ptr")
+        .as_ref()
+        .expect("return val ref");
+    assert_eq!(bat_err, types::Errno::Ok.into());
+    assert_eq!(*return_val, (input as f32) * 2.0);
 }
 
 #[test]
 fn baz() {
     let mut ctx = WasiCtx::new();
     let mut host_memory = HostMemory::new();
-    let guest_memory = memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
-    let sizeof_excuse = std::mem::size_of::<types::Excuse>();
-    let padding = 4 - sizeof_excuse % 4;
-    {
-        let lame_mut: memory::GuestPtrMut<types::Excuse> = guest_memory.ptr_mut(0).unwrap();
-        let mut lame = lame_mut.as_ref_mut().unwrap();
-        *lame = types::Excuse::Sleeping;
-    }
-    let lame: memory::GuestPtr<types::Excuse> = guest_memory
-        .ptr(0)
-        .expect("GuestPtr<types::Excuse> fits in the memory");
-    assert_eq!(*lame.as_ref().unwrap(), types::Excuse::Sleeping);
-    let better: memory::GuestPtrMut<types::Excuse> = guest_memory
-        .ptr_mut((sizeof_excuse + padding) as u32)
-        .expect("GuestPtr<types::Excuse> fits in the memory");
-    let ptr_to_ptr: memory::GuestPtrMut<memory::GuestPtr<types::Excuse>> = guest_memory
-        .ptr_mut((sizeof_excuse + padding) as u32 * 2)
-        .expect("GuestPtr<GuestPtr<_>> fits in the memory");
-    assert!(ctx
-        .baz(
-            types::Excuse::DogAte,
-            better.clone(),
-            lame,
-            ptr_to_ptr.clone()
-        )
-        .is_ok());
-    assert_eq!(*better.as_ref().unwrap(), types::Excuse::Sleeping);
-    let ptr = ptr_to_ptr.read_ptr_from_guest().unwrap();
-    assert_eq!(*ptr.as_ref().unwrap(), types::Excuse::Sleeping);
+    let mut guest_memory =
+        memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+
+    let input1 = types::Excuse::DogAte;
+    let input2 = types::Excuse::Traffic;
+    let input2_loc = 0;
+    let input3 = types::Excuse::Sleeping;
+    let input3_loc = 4;
+    let input4 = types::Excuse::DogAte;
+    let input4_loc = 8;
+    let input4_ptr_loc = 12;
+
+    *guest_memory
+        .ptr_mut(input2_loc)
+        .expect("input2 ptr")
+        .as_ref_mut()
+        .expect("input2 ref_mut") = input2;
+
+    *guest_memory
+        .ptr_mut(input3_loc)
+        .expect("input3 ptr")
+        .as_ref_mut()
+        .expect("input3 ref_mut") = input3;
+
+    *guest_memory
+        .ptr_mut(input4_loc)
+        .expect("input4 ptr")
+        .as_ref_mut()
+        .expect("input4 ref_mut") = input4;
+
+    *guest_memory
+        .ptr_mut(input4_ptr_loc)
+        .expect("input4 ptr ptr")
+        .as_ref_mut()
+        .expect("input4 ptr ref_mut") = input4_loc;
+
+    let baz_err = foo::baz(
+        &mut ctx,
+        &mut guest_memory,
+        input1.into(),
+        input2_loc as i32,
+        input3_loc as i32,
+        input4_ptr_loc as i32,
+    );
+    assert_eq!(baz_err, types::Errno::Ok.into());
+
+    // Implementation of baz writes input3 to the input2_loc:
+    let written_to_input2_loc: i32 = *guest_memory
+        .ptr(input2_loc)
+        .expect("input2 ptr")
+        .as_ref()
+        .expect("input2 ref");
+
+    assert_eq!(written_to_input2_loc, input3.into());
+
+    // Implementation of baz writes input2_loc to input4_ptr_loc:
+    let written_to_input4_ptr: u32 = *guest_memory
+        .ptr(input4_ptr_loc)
+        .expect("input4_ptr_loc ptr")
+        .as_ref()
+        .expect("input4_ptr_loc ref");
+
+    assert_eq!(written_to_input4_ptr, input2_loc);
 }
 
 #[test]
