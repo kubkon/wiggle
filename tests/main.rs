@@ -5,8 +5,6 @@ generate::from_witx!({
     ctx: WasiCtx,
 });
 
-use crate::foo::Foo;
-
 pub struct WasiCtx {
     guest_errors: Vec<::memory::GuestError>,
 }
@@ -225,32 +223,97 @@ fn baz() {
 #[test]
 fn sum_of_pair() {
     let mut ctx = WasiCtx::new();
-    let pair = types::PairInts {
+    let mut host_memory = HostMemory::new();
+    let mut guest_memory =
+        memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+
+    let input = types::PairInts {
         first: 1,
         second: 2,
     };
-    assert_eq!(ctx.sum_of_pair(&pair), Ok(3));
+
+    let input_loc = 0;
+    let return_loc = 8;
+
+    *guest_memory
+        .ptr_mut(input_loc)
+        .expect("input ptr")
+        .as_ref_mut()
+        .expect("input ref_mut") = input.first;
+    *guest_memory
+        .ptr_mut(input_loc + 4)
+        .expect("input ptr")
+        .as_ref_mut()
+        .expect("input ref_mut") = input.second;
+    let sum_err = foo::sum_of_pair(
+        &mut ctx,
+        &mut guest_memory,
+        input_loc as i32,
+        return_loc as i32,
+    );
+
+    assert_eq!(sum_err, types::Errno::Ok.into());
+
+    let return_val: i64 = *guest_memory
+        .ptr(return_loc)
+        .expect("return ptr")
+        .as_ref()
+        .expect("return ref");
+
+    assert_eq!(return_val, input.first as i64 + input.second as i64);
 }
 
 #[test]
 fn sum_of_pair_of_ptrs() {
     let mut ctx = WasiCtx::new();
     let mut host_memory = HostMemory::new();
-    let guest_memory = memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
-    {
-        let first_mut: memory::GuestPtrMut<i32> = guest_memory.ptr_mut(0).unwrap();
-        let mut x = first_mut.as_ref_mut().unwrap();
-        *x = 1;
-        let second_mut: memory::GuestPtrMut<i32> = guest_memory.ptr_mut(4).unwrap();
-        let mut x = second_mut.as_ref_mut().unwrap();
-        *x = 2;
-    }
-    let first: memory::GuestPtr<i32> = guest_memory
-        .ptr(0)
-        .expect("GuestPtr<i32> fits in the memory");
-    let second: memory::GuestPtr<i32> = guest_memory
-        .ptr(4)
-        .expect("GuestPtr<i32> fits in the memory");
-    let pair = types::PairIntPtrs { first, second };
-    assert_eq!(ctx.sum_of_pair_of_ptrs(&pair), Ok(3));
+    let mut guest_memory =
+        memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+
+    let input_first: i32 = 1;
+    let input_second: i32 = 2;
+
+    let input_first_loc = 0;
+    let input_second_loc = 4;
+    let input_struct_loc: u32 = 8;
+    let return_loc: u32 = 16;
+
+    *guest_memory
+        .ptr_mut(input_first_loc)
+        .expect("input_first ptr")
+        .as_ref_mut()
+        .expect("input_first ref") = input_first;
+    *guest_memory
+        .ptr_mut(input_second_loc)
+        .expect("input_second ptr")
+        .as_ref_mut()
+        .expect("input_second ref") = input_second;
+
+    *guest_memory
+        .ptr_mut(input_struct_loc)
+        .expect("input_struct ptr")
+        .as_ref_mut()
+        .expect("input_struct ref") = input_first_loc;
+    *guest_memory
+        .ptr_mut(input_struct_loc + 4)
+        .expect("input_struct ptr")
+        .as_ref_mut()
+        .expect("input_struct ref") = input_second_loc;
+
+    let res = foo::sum_of_pair_of_ptrs(
+        &mut ctx,
+        &mut guest_memory,
+        input_struct_loc as i32,
+        return_loc as i32,
+    );
+
+    assert_eq!(res, types::Errno::Ok.into());
+
+    let doubled: i64 = *guest_memory
+        .ptr(return_loc)
+        .expect("return ptr")
+        .as_ref()
+        .expect("return ref");
+
+    assert_eq!(doubled, (input_first as i64) + (input_second as i64));
 }
