@@ -372,13 +372,62 @@ impl<'a, T> GuestArray<'a, T>
 where
     T: GuestTypeCopy,
 {
-    pub fn as_ref(&'a self) -> Result<Vec<GuestRef<'a, T>>, GuestError> {
+    pub fn as_ref(&'a self) -> Result<&'a [T], GuestError> {
+        // FIXME FIXME FIXME
+        // OK, this is some terrible, black magic, voodoo hack
+        // I sincerely hope there is a better way of doing this!
         let mut out = vec![];
         for i in 0..self.num_elems {
             let ptr = self.ptr.elem(i as i32)?;
             T::validate(&ptr)?;
-            out.push(ptr.as_ref()?);
+            let el = ptr.as_ref()?;
+            out.push(*el);
         }
-        Ok(out)
+        let raw = Box::into_raw(out.into_boxed_slice());
+        Ok(unsafe { std::slice::from_raw_parts(raw as *const _, self.num_elems as usize) })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[repr(align(4096))]
+    struct HostMemory {
+        buffer: [u8; 4096],
+    }
+    impl HostMemory {
+        pub fn new() -> Self {
+            HostMemory { buffer: [0; 4096] }
+        }
+        pub fn as_mut_ptr(&mut self) -> *mut u8 {
+            self.buffer.as_mut_ptr()
+        }
+        pub fn len(&self) -> usize {
+            self.buffer.len()
+        }
+    }
+
+    #[test]
+    fn guest_array() {
+        let mut host_memory = HostMemory::new();
+        let guest_memory = GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+        // write a simple array into memory
+        {
+            let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(0).unwrap();
+            let mut el = ptr.as_ref_mut().unwrap();
+            *el = 1;
+            let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(4).unwrap();
+            let mut el = ptr.as_ref_mut().unwrap();
+            *el = 2;
+            let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(8).unwrap();
+            let mut el = ptr.as_ref_mut().unwrap();
+            *el = 3;
+        }
+        // extract as array
+        let ptr: GuestPtr<i32> = guest_memory.ptr(0).unwrap();
+        let arr = GuestArray { ptr, num_elems: 3 };
+        let as_ref = arr.as_ref().unwrap();
+        assert_eq!(as_ref, &[1, 2, 3]);
     }
 }
