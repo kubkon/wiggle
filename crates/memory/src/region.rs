@@ -1,3 +1,4 @@
+/// Represents a contiguous region in memory.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Region {
     pub start: u32,
@@ -9,6 +10,7 @@ impl Region {
         Self { start, len }
     }
 
+    /// Checks if this `Region` overlaps with `rhs` `Region`.
     pub fn overlaps(&self, rhs: Region) -> bool {
         let self_start = self.start as u64;
         let self_end = self_start + (self.len - 1) as u64;
