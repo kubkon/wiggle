@@ -1,4 +1,3 @@
-// FIXME: parameterize macro on what ctx type is used here
 generate::from_witx!({
     witx: ["tests/test.witx"],
     ctx: WasiCtx,
@@ -104,24 +103,28 @@ impl ::memory::GuestErrorType for types::Errno {
     }
 }
 
-#[derive(Debug)]
 #[repr(align(4096))]
-struct HostMemory<'a> {
-    buf: &'a mut [u8],
+struct HostMemory {
+    buffer: [u8; 4096],
+}
+impl HostMemory {
+    pub fn new() -> Self {
+        HostMemory { buffer: [0; 4096] }
+    }
+    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.buffer.as_mut_ptr()
+    }
+    pub fn len(&self) -> usize {
+        self.buffer.len()
+    }
 }
 
-impl<'a> HostMemory<'a> {
-    pub fn new(buf: &'a mut [u8]) -> Self {
-        Self { buf }
-    }
-
-    pub fn as_mut_ptr(&mut self) -> *mut u8 {
-        self.buf.as_mut_ptr()
-    }
-
-    pub fn len(&self) -> usize {
-        self.buf.len()
-    }
+#[test]
+fn hostmemory_is_aligned() {
+    let mut h = HostMemory::new();
+    assert_eq!(h.as_mut_ptr() as usize % 4096, 0);
+    let mut h = Box::new(HostMemory::new());
+    assert_eq!(h.as_mut_ptr() as usize % 4096, 0);
 }
 
 #[test]
@@ -133,8 +136,7 @@ fn bat() {
 #[test]
 fn baz() {
     let mut ctx = WasiCtx::new();
-    let raw = &mut [0u8; 4096];
-    let mut host_memory = HostMemory::new(raw);
+    let mut host_memory = HostMemory::new();
     let guest_memory = memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
     let sizeof_excuse = std::mem::size_of::<types::Excuse>();
     let padding = 4 - sizeof_excuse % 4;
@@ -179,8 +181,7 @@ fn sum_of_pair() {
 #[test]
 fn sum_of_pair_of_ptrs() {
     let mut ctx = WasiCtx::new();
-    let raw = &mut [0u8; 4096];
-    let mut host_memory = HostMemory::new(raw);
+    let mut host_memory = HostMemory::new();
     let guest_memory = memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
     {
         let first_mut: memory::GuestPtrMut<i32> = guest_memory.ptr_mut(0).unwrap();
