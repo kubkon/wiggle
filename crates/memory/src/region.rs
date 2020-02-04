@@ -7,6 +7,7 @@ pub struct Region {
 
 impl Region {
     pub fn new(start: u32, len: u32) -> Self {
+        assert!(len > 0, "Region cannot have 0 length");
         Self { start, len }
     }
 
