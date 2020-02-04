@@ -1,4 +1,5 @@
 use memory::GuestRef;
+use proptest::prelude::*;
 
 generate::from_witx!({
     witx: ["tests/test.witx"],
@@ -120,6 +121,14 @@ impl HostMemory {
     pub fn len(&self) -> usize {
         self.buffer.len()
     }
+    pub fn pointer_strat(align: u32) -> BoxedStrategy<u32> {
+        prop::num::u32::ANY
+            .prop_map(move |p| {
+                let p_aligned = p - (p % align); // Align according to argument
+                p_aligned % 4096 // Put inside memory
+            })
+            .boxed()
+    }
 }
 
 #[test]
@@ -130,190 +139,318 @@ fn hostmemory_is_aligned() {
     assert_eq!(h.as_mut_ptr() as usize % 4096, 0);
 }
 
-#[test]
-fn bat() {
-    let mut ctx = WasiCtx::new();
-    let mut host_memory = HostMemory::new();
-    let mut guest_memory =
-        memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
-
-    let input = 2;
-    let return_loc = 0;
-
-    let bat_err = foo::bat(&mut ctx, &mut guest_memory, input, return_loc);
-
-    let return_val: GuestRef<f32> = guest_memory
-        .ptr(return_loc as u32)
-        .expect("return loc ptr")
-        .as_ref()
-        .expect("return val ref");
-    assert_eq!(bat_err, types::Errno::Ok.into());
-    assert_eq!(*return_val, (input as f32) * 2.0);
+#[derive(Debug)]
+struct BatExercise {
+    pub input: u32,
+    pub return_loc: u32,
 }
 
-#[test]
-fn baz() {
-    let mut ctx = WasiCtx::new();
-    let mut host_memory = HostMemory::new();
-    let mut guest_memory =
-        memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+impl BatExercise {
+    pub fn test(&self) {
+        let mut ctx = WasiCtx::new();
+        let mut host_memory = HostMemory::new();
+        let mut guest_memory =
+            memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
 
-    let input1 = types::Excuse::DogAte;
-    let input2 = types::Excuse::Traffic;
-    let input2_loc = 0;
-    let input3 = types::Excuse::Sleeping;
-    let input3_loc = 4;
-    let input4 = types::Excuse::DogAte;
-    let input4_loc = 8;
-    let input4_ptr_loc = 12;
+        let bat_err = foo::bat(
+            &mut ctx,
+            &mut guest_memory,
+            self.input as i32,
+            self.return_loc as i32,
+        );
 
-    *guest_memory
-        .ptr_mut(input2_loc)
-        .expect("input2 ptr")
-        .as_ref_mut()
-        .expect("input2 ref_mut") = input2;
+        let return_val: GuestRef<f32> = guest_memory
+            .ptr(self.return_loc)
+            .expect("return loc ptr")
+            .as_ref()
+            .expect("return val ref");
+        assert_eq!(bat_err, types::Errno::Ok.into());
+        assert_eq!(*return_val, (self.input as f32) * 2.0);
+    }
 
-    *guest_memory
-        .ptr_mut(input3_loc)
-        .expect("input3 ptr")
-        .as_ref_mut()
-        .expect("input3 ref_mut") = input3;
+    pub fn strat() -> BoxedStrategy<Self> {
+        (prop::num::u32::ANY, HostMemory::pointer_strat(4))
+            .prop_map(|(input, return_loc)| BatExercise { input, return_loc })
+            .boxed()
+    }
+}
 
-    *guest_memory
-        .ptr_mut(input4_loc)
-        .expect("input4 ptr")
-        .as_ref_mut()
-        .expect("input4 ref_mut") = input4;
+proptest! {
+    #[test]
+    fn bat(e in BatExercise::strat()) {
+        e.test()
+    }
+}
 
-    *guest_memory
-        .ptr_mut(input4_ptr_loc)
-        .expect("input4 ptr ptr")
-        .as_ref_mut()
-        .expect("input4 ptr ref_mut") = input4_loc;
+fn excuse_strat() -> impl Strategy<Value = types::Excuse> {
+    prop_oneof![
+        Just(types::Excuse::DogAte),
+        Just(types::Excuse::Traffic),
+        Just(types::Excuse::Sleeping),
+    ]
+    .boxed()
+}
 
-    let baz_err = foo::baz(
-        &mut ctx,
-        &mut guest_memory,
-        input1.into(),
-        input2_loc as i32,
-        input3_loc as i32,
-        input4_ptr_loc as i32,
-    );
-    assert_eq!(baz_err, types::Errno::Ok.into());
+#[derive(Debug)]
+struct BazExercise {
+    pub input1: types::Excuse,
+    pub input2: types::Excuse,
+    pub input2_loc: u32,
+    pub input3: types::Excuse,
+    pub input3_loc: u32,
+    pub input4: types::Excuse,
+    pub input4_loc: u32,
+    pub input4_ptr_loc: u32,
+}
 
-    // Implementation of baz writes input3 to the input2_loc:
-    let written_to_input2_loc: i32 = *guest_memory
-        .ptr(input2_loc)
-        .expect("input2 ptr")
-        .as_ref()
-        .expect("input2 ref");
+impl BazExercise {
+    pub fn strat() -> BoxedStrategy<Self> {
+        (
+            excuse_strat(),
+            excuse_strat(),
+            HostMemory::pointer_strat(4),
+            excuse_strat(),
+            HostMemory::pointer_strat(4),
+            excuse_strat(),
+            HostMemory::pointer_strat(4),
+            HostMemory::pointer_strat(4),
+        )
+            .prop_map(
+                |(
+                    input1,
+                    input2,
+                    input2_loc,
+                    input3,
+                    input3_loc,
+                    input4,
+                    input4_loc,
+                    input4_ptr_loc,
+                )| BazExercise {
+                    input1,
+                    input2,
+                    input2_loc,
+                    input3,
+                    input3_loc,
+                    input4,
+                    input4_loc,
+                    input4_ptr_loc,
+                },
+            )
+            .prop_filter("non-overlapping pointers", |e| {
+                e.input2_loc != e.input3_loc
+                    && e.input2_loc != e.input4_loc
+                    && e.input2_loc != e.input4_ptr_loc
+                    && e.input3_loc != e.input4_loc
+                    && e.input3_loc != e.input4_ptr_loc
+                    && e.input4_loc != e.input4_ptr_loc
+            })
+            .boxed()
+    }
+    pub fn test(&self) {
+        let mut ctx = WasiCtx::new();
+        let mut host_memory = HostMemory::new();
+        let mut guest_memory =
+            memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
 
-    assert_eq!(written_to_input2_loc, input3.into());
+        *guest_memory
+            .ptr_mut(self.input2_loc)
+            .expect("input2 ptr")
+            .as_ref_mut()
+            .expect("input2 ref_mut") = self.input2;
 
-    // Implementation of baz writes input2_loc to input4_ptr_loc:
-    let written_to_input4_ptr: u32 = *guest_memory
-        .ptr(input4_ptr_loc)
-        .expect("input4_ptr_loc ptr")
-        .as_ref()
-        .expect("input4_ptr_loc ref");
+        *guest_memory
+            .ptr_mut(self.input3_loc)
+            .expect("input3 ptr")
+            .as_ref_mut()
+            .expect("input3 ref_mut") = self.input3;
 
-    assert_eq!(written_to_input4_ptr, input2_loc);
+        *guest_memory
+            .ptr_mut(self.input4_loc)
+            .expect("input4 ptr")
+            .as_ref_mut()
+            .expect("input4 ref_mut") = self.input4;
+
+        *guest_memory
+            .ptr_mut(self.input4_ptr_loc)
+            .expect("input4 ptr ptr")
+            .as_ref_mut()
+            .expect("input4 ptr ref_mut") = self.input4_loc;
+
+        let baz_err = foo::baz(
+            &mut ctx,
+            &mut guest_memory,
+            self.input1.into(),
+            self.input2_loc as i32,
+            self.input3_loc as i32,
+            self.input4_ptr_loc as i32,
+        );
+        assert_eq!(baz_err, types::Errno::Ok.into());
+
+        // Implementation of baz writes input3 to the input2_loc:
+        let written_to_input2_loc: i32 = *guest_memory
+            .ptr(self.input2_loc)
+            .expect("input2 ptr")
+            .as_ref()
+            .expect("input2 ref");
+
+        assert_eq!(written_to_input2_loc, self.input3.into());
+
+        // Implementation of baz writes input2_loc to input4_ptr_loc:
+        let written_to_input4_ptr: u32 = *guest_memory
+            .ptr(self.input4_ptr_loc)
+            .expect("input4_ptr_loc ptr")
+            .as_ref()
+            .expect("input4_ptr_loc ref");
+
+        assert_eq!(written_to_input4_ptr, self.input2_loc);
+    }
+}
+proptest! {
+    #[test]
+    fn baz(e in BazExercise::strat()) {
+        e.test();
+        BazExercise {
+            input1: types::Excuse::DogAte,
+            input2: types::Excuse::Traffic,
+            input2_loc: 0,
+            input3: types::Excuse::Sleeping,
+            input3_loc: 4,
+            input4: types::Excuse::DogAte,
+            input4_loc: 8,
+            input4_ptr_loc: 12,
+        }
+        .test()
+    }
+}
+
+#[derive(Debug)]
+struct SumOfPairExercise {
+    pub input: types::PairInts,
+    pub input_loc: u32,
+    pub return_loc: u32,
+}
+
+impl SumOfPairExercise {
+    pub fn test(&self) {
+        let mut ctx = WasiCtx::new();
+        let mut host_memory = HostMemory::new();
+        let mut guest_memory =
+            memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+        *guest_memory
+            .ptr_mut(self.input_loc)
+            .expect("input ptr")
+            .as_ref_mut()
+            .expect("input ref_mut") = self.input.first;
+        *guest_memory
+            .ptr_mut(self.input_loc + 4)
+            .expect("input ptr")
+            .as_ref_mut()
+            .expect("input ref_mut") = self.input.second;
+        let sum_err = foo::sum_of_pair(
+            &mut ctx,
+            &mut guest_memory,
+            self.input_loc as i32,
+            self.return_loc as i32,
+        );
+
+        assert_eq!(sum_err, types::Errno::Ok.into());
+
+        let return_val: i64 = *guest_memory
+            .ptr(self.return_loc)
+            .expect("return ptr")
+            .as_ref()
+            .expect("return ref");
+
+        assert_eq!(
+            return_val,
+            self.input.first as i64 + self.input.second as i64
+        );
+    }
 }
 
 #[test]
 fn sum_of_pair() {
-    let mut ctx = WasiCtx::new();
-    let mut host_memory = HostMemory::new();
-    let mut guest_memory =
-        memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+    SumOfPairExercise {
+        input: types::PairInts {
+            first: 1,
+            second: 2,
+        },
+        input_loc: 0,
+        return_loc: 8,
+    }
+    .test()
+}
 
-    let input = types::PairInts {
-        first: 1,
-        second: 2,
-    };
+#[derive(Debug)]
+struct SumPairPtrsExercise {
+    input_first: i32,
+    input_second: i32,
+    input_first_loc: u32,
+    input_second_loc: u32,
+    input_struct_loc: u32,
+    return_loc: u32,
+}
 
-    let input_loc = 0;
-    let return_loc = 8;
+impl SumPairPtrsExercise {
+    pub fn test(&self) {
+        let mut ctx = WasiCtx::new();
+        let mut host_memory = HostMemory::new();
+        let mut guest_memory =
+            memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
 
-    *guest_memory
-        .ptr_mut(input_loc)
-        .expect("input ptr")
-        .as_ref_mut()
-        .expect("input ref_mut") = input.first;
-    *guest_memory
-        .ptr_mut(input_loc + 4)
-        .expect("input ptr")
-        .as_ref_mut()
-        .expect("input ref_mut") = input.second;
-    let sum_err = foo::sum_of_pair(
-        &mut ctx,
-        &mut guest_memory,
-        input_loc as i32,
-        return_loc as i32,
-    );
+        *guest_memory
+            .ptr_mut(self.input_first_loc)
+            .expect("input_first ptr")
+            .as_ref_mut()
+            .expect("input_first ref") = self.input_first;
+        *guest_memory
+            .ptr_mut(self.input_second_loc)
+            .expect("input_second ptr")
+            .as_ref_mut()
+            .expect("input_second ref") = self.input_second;
 
-    assert_eq!(sum_err, types::Errno::Ok.into());
+        *guest_memory
+            .ptr_mut(self.input_struct_loc)
+            .expect("input_struct ptr")
+            .as_ref_mut()
+            .expect("input_struct ref") = self.input_first_loc;
+        *guest_memory
+            .ptr_mut(self.input_struct_loc + 4)
+            .expect("input_struct ptr")
+            .as_ref_mut()
+            .expect("input_struct ref") = self.input_second_loc;
 
-    let return_val: i64 = *guest_memory
-        .ptr(return_loc)
-        .expect("return ptr")
-        .as_ref()
-        .expect("return ref");
+        let res = foo::sum_of_pair_of_ptrs(
+            &mut ctx,
+            &mut guest_memory,
+            self.input_struct_loc as i32,
+            self.return_loc as i32,
+        );
 
-    assert_eq!(return_val, input.first as i64 + input.second as i64);
+        assert_eq!(res, types::Errno::Ok.into());
+
+        let doubled: i64 = *guest_memory
+            .ptr(self.return_loc)
+            .expect("return ptr")
+            .as_ref()
+            .expect("return ref");
+
+        assert_eq!(
+            doubled,
+            (self.input_first as i64) + (self.input_second as i64)
+        );
+    }
 }
 
 #[test]
 fn sum_of_pair_of_ptrs() {
-    let mut ctx = WasiCtx::new();
-    let mut host_memory = HostMemory::new();
-    let mut guest_memory =
-        memory::GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
-
-    let input_first: i32 = 1;
-    let input_second: i32 = 2;
-
-    let input_first_loc = 0;
-    let input_second_loc = 4;
-    let input_struct_loc: u32 = 8;
-    let return_loc: u32 = 16;
-
-    *guest_memory
-        .ptr_mut(input_first_loc)
-        .expect("input_first ptr")
-        .as_ref_mut()
-        .expect("input_first ref") = input_first;
-    *guest_memory
-        .ptr_mut(input_second_loc)
-        .expect("input_second ptr")
-        .as_ref_mut()
-        .expect("input_second ref") = input_second;
-
-    *guest_memory
-        .ptr_mut(input_struct_loc)
-        .expect("input_struct ptr")
-        .as_ref_mut()
-        .expect("input_struct ref") = input_first_loc;
-    *guest_memory
-        .ptr_mut(input_struct_loc + 4)
-        .expect("input_struct ptr")
-        .as_ref_mut()
-        .expect("input_struct ref") = input_second_loc;
-
-    let res = foo::sum_of_pair_of_ptrs(
-        &mut ctx,
-        &mut guest_memory,
-        input_struct_loc as i32,
-        return_loc as i32,
-    );
-
-    assert_eq!(res, types::Errno::Ok.into());
-
-    let doubled: i64 = *guest_memory
-        .ptr(return_loc)
-        .expect("return ptr")
-        .as_ref()
-        .expect("return ref");
-
-    assert_eq!(doubled, (input_first as i64) + (input_second as i64));
+    SumPairPtrsExercise {
+        input_first: 1,
+        input_second: 2,
+        input_first_loc: 0,
+        input_second_loc: 4,
+        input_struct_loc: 8,
+        return_loc: 16,
+    }
+    .test()
 }
