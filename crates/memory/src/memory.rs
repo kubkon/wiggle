@@ -372,16 +372,137 @@ impl<'a, T> GuestArray<'a, T>
 where
     T: GuestTypeCopy,
 {
-    pub fn as_ref(&'a self) -> Result<&'a [T], GuestError> {
-        // First, validate
-        for i in 0..self.num_elems {
-            let ptr = self.ptr.elem(i as i32)?;
+    pub fn as_ref(&self) -> Result<GuestArrayRef<'a, T>, GuestError> {
+        let mut ptr = self.ptr.clone();
+        for _ in 0..self.num_elems {
+            ptr = ptr.elem(1)?;
             T::validate(&ptr)?;
         }
-        // Then, extract as slice
-        Ok(unsafe {
-            std::slice::from_raw_parts(self.ptr.as_raw() as *const T, self.num_elems as usize)
+        let region = self.ptr.region.extend(T::size() * self.num_elems);
+        let handle = {
+            let mut borrows = self.ptr.mem.borrows.borrow_mut();
+            borrows
+                .borrow_immut(region)
+                .ok_or_else(|| GuestError::PtrBorrowed(region))?
+        };
+        let r#ref = GuestRef {
+            mem: self.ptr.mem,
+            region,
+            handle,
+            type_: self.ptr.type_,
+        };
+        Ok(GuestArrayRef {
+            r#ref,
+            num_elems: self.num_elems,
         })
+    }
+}
+
+pub struct GuestArrayRef<'a, T>
+where
+    T: GuestType,
+{
+    r#ref: GuestRef<'a, T>,
+    num_elems: u32,
+}
+
+impl<'a, T> ::std::ops::Deref for GuestArrayRef<'a, T>
+where
+    T: GuestTypeCopy,
+{
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        unsafe {
+            std::slice::from_raw_parts(
+                self.r#ref.as_ptr().as_raw() as *const T,
+                self.num_elems as usize,
+            )
+        }
+    }
+}
+
+pub struct GuestArrayMut<'a, T>
+where
+    T: GuestType,
+{
+    ptr: GuestPtrMut<'a, T>,
+    num_elems: u32,
+}
+
+impl<'a, T> GuestArrayMut<'a, T>
+where
+    T: GuestTypeCopy,
+{
+    pub fn as_ref(&self) -> Result<GuestArrayRef<'a, T>, GuestError> {
+        let arr = GuestArray {
+            ptr: self.ptr.as_immut(),
+            num_elems: self.num_elems,
+        };
+        arr.as_ref()
+    }
+
+    pub fn as_ref_mut(&self) -> Result<GuestArrayRefMut<'a, T>, GuestError> {
+        let mut ptr = self.ptr.as_immut();
+        for _ in 0..self.num_elems {
+            ptr = ptr.elem(1)?;
+            T::validate(&ptr)?;
+        }
+        let region = self.ptr.region.extend(T::size() * self.num_elems);
+        let handle = {
+            let mut borrows = self.ptr.mem.borrows.borrow_mut();
+            borrows
+                .borrow_mut(region)
+                .ok_or_else(|| GuestError::PtrBorrowed(region))?
+        };
+        let ref_mut = GuestRefMut {
+            mem: self.ptr.mem,
+            region,
+            handle,
+            type_: self.ptr.type_,
+        };
+        Ok(GuestArrayRefMut {
+            ref_mut,
+            num_elems: self.num_elems,
+        })
+    }
+}
+
+pub struct GuestArrayRefMut<'a, T>
+where
+    T: GuestTypeCopy,
+{
+    ref_mut: GuestRefMut<'a, T>,
+    num_elems: u32,
+}
+
+impl<'a, T> ::std::ops::Deref for GuestArrayRefMut<'a, T>
+where
+    T: GuestTypeCopy,
+{
+    type Target = [T];
+
+    fn deref(&self) -> &[T] {
+        unsafe {
+            std::slice::from_raw_parts(
+                self.ref_mut.as_ptr().as_raw() as *const T,
+                self.num_elems as usize,
+            )
+        }
+    }
+}
+
+impl<'a, T> ::std::ops::DerefMut for GuestArrayRefMut<'a, T>
+where
+    T: GuestTypeCopy,
+{
+    fn deref_mut(&mut self) -> &mut [T] {
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.ref_mut.as_ptr_mut().as_raw() as *mut T,
+                self.num_elems as usize,
+            )
+        }
     }
 }
 
@@ -393,9 +514,10 @@ mod test {
     struct HostMemory {
         buffer: [u8; 4096],
     }
+
     impl HostMemory {
         pub fn new() -> Self {
-            HostMemory { buffer: [0; 4096] }
+            Self { buffer: [0; 4096] }
         }
         pub fn as_mut_ptr(&mut self) -> *mut u8 {
             self.buffer.as_mut_ptr()
@@ -411,20 +533,93 @@ mod test {
         let guest_memory = GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
         // write a simple array into memory
         {
-            let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(0).unwrap();
-            let mut el = ptr.as_ref_mut().unwrap();
+            let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(0).expect("ptr mut to first el");
+            let mut el = ptr.as_ref_mut().expect("ref mut to first el");
             *el = 1;
-            let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(4).unwrap();
-            let mut el = ptr.as_ref_mut().unwrap();
+            let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(4).expect("ptr mut to second el");
+            let mut el = ptr.as_ref_mut().expect("ref mu to second el");
             *el = 2;
-            let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(8).unwrap();
-            let mut el = ptr.as_ref_mut().unwrap();
+            let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(8).expect("ptr mut to third el");
+            let mut el = ptr.as_ref_mut().expect("ref mut to third el");
             *el = 3;
         }
         // extract as array
-        let ptr: GuestPtr<i32> = guest_memory.ptr(0).unwrap();
+        let ptr: GuestPtr<i32> = guest_memory.ptr(0).expect("ptr to first el");
         let arr = GuestArray { ptr, num_elems: 3 };
-        let as_ref = arr.as_ref().unwrap();
-        assert_eq!(as_ref, &[1, 2, 3]);
+        let as_ref = arr.as_ref().expect("array borrowed immutably");
+        assert_eq!(&*as_ref, &[1, 2, 3]);
+        // borrowing again should be fine
+        let as_ref2 = arr.as_ref().expect("array borrowed immutably again");
+        assert_eq!(&*as_ref2, &*as_ref);
+    }
+
+    #[test]
+    fn guest_array_mut() {
+        let mut host_memory = HostMemory::new();
+        let guest_memory = GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+        // set elems of array to zero
+        {
+            let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(0).expect("ptr mut to first el");
+            let mut el = ptr.as_ref_mut().expect("ref mut to first el");
+            *el = 0;
+            let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(4).expect("ptr mut to second el");
+            let mut el = ptr.as_ref_mut().expect("ref mu to second el");
+            *el = 0;
+            let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(8).expect("ptr mut to third el");
+            let mut el = ptr.as_ref_mut().expect("ref mut to third el");
+            *el = 0;
+        }
+        // extract as array and verify all is zero
+        let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(0).expect("ptr mut to first el");
+        let arr = GuestArrayMut { ptr, num_elems: 3 };
+        assert_eq!(&*arr.as_ref().expect("array borrowed immutably"), &[0; 3]);
+        // populate the array and re-verify
+        for el in &mut *arr.as_ref_mut().expect("array borrowed mutably") {
+            *el = 10;
+        }
+        // re-validate
+        assert_eq!(&*arr.as_ref().expect("array borrowed immutably"), &[10; 3]);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "array borrowed immutably while borrowed mutably: PtrBorrowed(Region { start: 0, len: 12 })"
+    )]
+    fn guest_array_mut_borrow_checker_1() {
+        let mut host_memory = HostMemory::new();
+        let guest_memory = GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+        let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(0).expect("ptr mut to first el");
+        let arr = GuestArrayMut { ptr, num_elems: 3 };
+        // borrow mutably
+        let _as_mut = arr
+            .as_ref_mut()
+            .expect("array borrowed mutably for the first time");
+        // borrow immutably should be fine
+        let _as_ref = arr
+            .as_ref()
+            .expect("array borrowed immutably while borrowed mutably");
+        // // try borrowing mutably again
+        // let _as_mut2 = arr
+        //     .as_ref_mut()
+        //     .expect("array borrowed mutably for the second time");
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "array borrowed mutably while borrowed mutably: PtrBorrowed(Region { start: 0, len: 12 })"
+    )]
+    fn guest_array_mut_borrow_checker_2() {
+        let mut host_memory = HostMemory::new();
+        let guest_memory = GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+        let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(0).expect("ptr mut to first el");
+        let arr = GuestArrayMut { ptr, num_elems: 3 };
+        // borrow mutably
+        let _as_mut = arr
+            .as_ref_mut()
+            .expect("array borrowed mutably for the first time");
+        // try borrowing mutably again
+        let _as_mut2 = arr
+            .as_ref_mut()
+            .expect("array borrowed mutably while borrowed mutably");
     }
 }
