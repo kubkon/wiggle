@@ -29,7 +29,7 @@ impl Region {
     pub fn extend(&self, new_len: u32) -> Self {
         Self {
             start: self.start,
-            len: new_len,
+            len: self.len + new_len,
         }
     }
 }

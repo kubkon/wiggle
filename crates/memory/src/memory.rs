@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::fmt;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
@@ -10,6 +11,16 @@ pub struct GuestMemory<'a> {
     len: u32,
     lifetime: PhantomData<&'a ()>,
     borrows: Rc<RefCell<GuestBorrows>>,
+}
+
+impl<'a> fmt::Debug for GuestMemory<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "GuestMemory {{ ptr: {:?}, len: {:?}, borrows: {:?} }}",
+            self.ptr, self.len, self.borrows
+        )
+    }
 }
 
 impl<'a> GuestMemory<'a> {
@@ -63,6 +74,16 @@ pub struct GuestPtr<'a, T> {
     type_: PhantomData<T>,
 }
 
+impl<'a, T: fmt::Debug> fmt::Debug for GuestPtr<'a, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "GuestPtr {{ mem: {:?}, region: {:?} }}",
+            self.mem, self.region
+        )
+    }
+}
+
 impl<'a, T: GuestType> GuestPtr<'a, T> {
     pub fn as_raw(&self) -> *const u8 {
         (self.mem.ptr as usize + self.region.start as usize) as *const u8
@@ -75,6 +96,20 @@ impl<'a, T: GuestType> GuestPtr<'a, T> {
 
     pub fn cast<TT: GuestType>(&self, offset: u32) -> Result<GuestPtr<'a, TT>, GuestError> {
         self.mem.ptr(self.region.start + offset)
+    }
+
+    pub fn array(&self, num_elems: u32) -> Result<GuestArray<'a, T>, GuestError> {
+        let region = self.region.extend((num_elems - 1) * T::size());
+        if self.mem.contains(region) {
+            let ptr = GuestPtr {
+                mem: self.mem,
+                region: self.region,
+                type_: self.type_,
+            };
+            Ok(GuestArray { ptr, num_elems })
+        } else {
+            Err(GuestError::PtrOutOfBounds(region))
+        }
     }
 }
 
@@ -158,6 +193,16 @@ pub struct GuestPtrMut<'a, T> {
     type_: PhantomData<T>,
 }
 
+impl<'a, T: fmt::Debug> fmt::Debug for GuestPtrMut<'a, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "GuestPtrMut {{ mem: {:?}, region: {:?} }}",
+            self.mem, self.region
+        )
+    }
+}
+
 impl<'a, T: GuestType> GuestPtrMut<'a, T> {
     pub fn as_immut(&self) -> GuestPtr<'a, T> {
         GuestPtr {
@@ -170,6 +215,7 @@ impl<'a, T: GuestType> GuestPtrMut<'a, T> {
     pub fn as_raw(&self) -> *const u8 {
         self.as_immut().as_raw()
     }
+
     pub fn elem(&self, elements: i32) -> Result<GuestPtrMut<'a, T>, GuestError> {
         self.mem
             .ptr_mut(self.region.start + (elements * self.region.len as i32) as u32)
@@ -177,6 +223,20 @@ impl<'a, T: GuestType> GuestPtrMut<'a, T> {
 
     pub fn cast<TT: GuestType>(&self, offset: u32) -> Result<GuestPtrMut<'a, TT>, GuestError> {
         self.mem.ptr_mut(self.region.start + offset)
+    }
+
+    pub fn array_mut(&self, num_elems: u32) -> Result<GuestArrayMut<'a, T>, GuestError> {
+        let region = self.region.extend((num_elems - 1) * T::size());
+        if self.mem.contains(region) {
+            let ptr = GuestPtrMut {
+                mem: self.mem,
+                region: self.region,
+                type_: self.type_,
+            };
+            Ok(GuestArrayMut { ptr, num_elems })
+        } else {
+            Err(GuestError::PtrOutOfBounds(region))
+        }
     }
 }
 
@@ -271,6 +331,16 @@ pub struct GuestRef<'a, T> {
     type_: PhantomData<T>,
 }
 
+impl<'a, T: fmt::Debug> fmt::Debug for GuestRef<'a, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "GuestRef {{ mem: {:?}, region: {:?}, handle: {:?} }}",
+            self.mem, self.region, self.handle
+        )
+    }
+}
+
 impl<'a, T> GuestRef<'a, T> {
     pub fn as_ptr(&self) -> GuestPtr<'a, T> {
         GuestPtr {
@@ -307,6 +377,16 @@ pub struct GuestRefMut<'a, T> {
     region: Region,
     handle: BorrowHandle,
     type_: PhantomData<T>,
+}
+
+impl<'a, T: fmt::Debug> fmt::Debug for GuestRefMut<'a, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "GuestRefMut {{ mem: {:?}, region: {:?}, handle: {:?} }}",
+            self.mem, self.region, self.handle
+        )
+    }
 }
 
 impl<'a, T> GuestRefMut<'a, T> {
@@ -368,6 +448,16 @@ where
     num_elems: u32,
 }
 
+impl<'a, T: GuestType + fmt::Debug> fmt::Debug for GuestArray<'a, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "GuestArray {{ ptr: {:?}, num_elems: {:?} }}",
+            self.ptr, self.num_elems
+        )
+    }
+}
+
 impl<'a, T> GuestArray<'a, T>
 where
     T: GuestTypeCopy,
@@ -378,7 +468,7 @@ where
             ptr = ptr.elem(1)?;
             T::validate(&ptr)?;
         }
-        let region = self.ptr.region.extend(T::size() * self.num_elems);
+        let region = self.ptr.region.extend((self.num_elems - 1) * T::size());
         let handle = {
             let mut borrows = self.ptr.mem.borrows.borrow_mut();
             borrows
@@ -406,6 +496,19 @@ where
     num_elems: u32,
 }
 
+impl<'a, T> fmt::Debug for GuestArrayRef<'a, T>
+where
+    T: GuestType + fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "GuestArrayRef {{ ref_: {:?}, num_elems: {:?} }}",
+            self.ref_, self.num_elems
+        )
+    }
+}
+
 impl<'a, T> ::std::ops::Deref for GuestArrayRef<'a, T>
 where
     T: GuestTypeCopy,
@@ -430,6 +533,16 @@ where
     num_elems: u32,
 }
 
+impl<'a, T: GuestType + fmt::Debug> fmt::Debug for GuestArrayMut<'a, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "GuestArrayMut {{ ptr: {:?}, num_elems: {:?} }}",
+            self.ptr, self.num_elems
+        )
+    }
+}
+
 impl<'a, T> GuestArrayMut<'a, T>
 where
     T: GuestTypeCopy,
@@ -448,7 +561,7 @@ where
             ptr = ptr.elem(1)?;
             T::validate(&ptr)?;
         }
-        let region = self.ptr.region.extend(T::size() * self.num_elems);
+        let region = self.ptr.region.extend((self.num_elems - 1) * T::size());
         let handle = {
             let mut borrows = self.ptr.mem.borrows.borrow_mut();
             borrows
@@ -470,10 +583,23 @@ where
 
 pub struct GuestArrayRefMut<'a, T>
 where
-    T: GuestTypeCopy,
+    T: GuestType,
 {
     ref_mut: GuestRefMut<'a, T>,
     num_elems: u32,
+}
+
+impl<'a, T> fmt::Debug for GuestArrayRefMut<'a, T>
+where
+    T: GuestType + fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "GuestArrayRefMut {{ ref_mut: {:?}, num_elems: {:?} }}",
+            self.ref_mut, self.num_elems
+        )
+    }
 }
 
 impl<'a, T> ::std::ops::Deref for GuestArrayRefMut<'a, T>
@@ -528,6 +654,20 @@ mod test {
     }
 
     #[test]
+    fn guest_array_out_of_bounds() {
+        let mut host_memory = HostMemory::new();
+        let guest_memory = GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+        // try extracting an immutable array out of memory bounds
+        let ptr: GuestPtr<i32> = guest_memory.ptr(4092).expect("ptr to last i32 el");
+        let err = ptr.array(2).expect_err("out of bounds ptr error");
+        assert_eq!(err, GuestError::PtrOutOfBounds(Region::new(4092, 8)));
+        // try extracting an mutable array out of memory bounds
+        let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(4092).expect("ptr mut to last i32 el");
+        let err = ptr.array_mut(2).expect_err("out of bounds ptr error");
+        assert_eq!(err, GuestError::PtrOutOfBounds(Region::new(4092, 8)));
+    }
+
+    #[test]
     fn guest_array() {
         let mut host_memory = HostMemory::new();
         let guest_memory = GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
@@ -545,7 +685,7 @@ mod test {
         }
         // extract as array
         let ptr: GuestPtr<i32> = guest_memory.ptr(0).expect("ptr to first el");
-        let arr = GuestArray { ptr, num_elems: 3 };
+        let arr = ptr.array(3).expect("convert ptr to array");
         let as_ref = arr.as_ref().expect("array borrowed immutably");
         assert_eq!(&*as_ref, &[1, 2, 3]);
         // borrowing again should be fine
@@ -571,7 +711,7 @@ mod test {
         }
         // extract as array and verify all is zero
         let ptr: GuestPtrMut<i32> = guest_memory.ptr_mut(0).expect("ptr mut to first el");
-        let arr = GuestArrayMut { ptr, num_elems: 3 };
+        let arr = ptr.array_mut(3).expect("convert ptr mut to array mut");
         assert_eq!(&*arr.as_ref().expect("array borrowed immutably"), &[0; 3]);
         // populate the array and re-verify
         for el in &mut *arr.as_ref_mut().expect("array borrowed mutably") {
@@ -598,10 +738,6 @@ mod test {
         let _as_ref = arr
             .as_ref()
             .expect("array borrowed immutably while borrowed mutably");
-        // // try borrowing mutably again
-        // let _as_mut2 = arr
-        //     .as_ref_mut()
-        //     .expect("array borrowed mutably for the second time");
     }
 
     #[test]
