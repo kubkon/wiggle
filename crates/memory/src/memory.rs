@@ -385,14 +385,14 @@ where
                 .borrow_immut(region)
                 .ok_or_else(|| GuestError::PtrBorrowed(region))?
         };
-        let r#ref = GuestRef {
+        let ref_ = GuestRef {
             mem: self.ptr.mem,
             region,
             handle,
             type_: self.ptr.type_,
         };
         Ok(GuestArrayRef {
-            r#ref,
+            ref_,
             num_elems: self.num_elems,
         })
     }
@@ -402,7 +402,7 @@ pub struct GuestArrayRef<'a, T>
 where
     T: GuestType,
 {
-    r#ref: GuestRef<'a, T>,
+    ref_: GuestRef<'a, T>,
     num_elems: u32,
 }
 
@@ -415,7 +415,7 @@ where
     fn deref(&self) -> &Self::Target {
         unsafe {
             std::slice::from_raw_parts(
-                self.r#ref.as_ptr().as_raw() as *const T,
+                self.ref_.as_ptr().as_raw() as *const T,
                 self.num_elems as usize,
             )
         }
@@ -482,7 +482,7 @@ where
 {
     type Target = [T];
 
-    fn deref(&self) -> &[T] {
+    fn deref(&self) -> &Self::Target {
         unsafe {
             std::slice::from_raw_parts(
                 self.ref_mut.as_ptr().as_raw() as *const T,
@@ -496,7 +496,7 @@ impl<'a, T> ::std::ops::DerefMut for GuestArrayRefMut<'a, T>
 where
     T: GuestTypeCopy,
 {
-    fn deref_mut(&mut self) -> &mut [T] {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe {
             std::slice::from_raw_parts_mut(
                 self.ref_mut.as_ptr_mut().as_raw() as *mut T,
