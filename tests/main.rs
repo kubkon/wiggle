@@ -1,6 +1,7 @@
 use proptest::prelude::*;
 use wiggle_runtime::{
     GuestError, GuestErrorType, GuestMemory, GuestPtr, GuestPtrMut, GuestRef, GuestRefMut,
+    GuestType,
 };
 
 wiggle_generate::from_witx!({
@@ -92,6 +93,26 @@ impl foo::Foo for WasiCtx {
             .expect("dereferncing GuestPtr should succeed");
         Ok(first as i64 + second as i64)
     }
+
+    fn reduce_excuses(
+        &mut self,
+        excuses: &types::ExcuseArray,
+    ) -> Result<types::Excuse, types::Errno> {
+        let excuses = &*excuses
+            .as_ref()
+            .expect("dereferencing GuestArrayMut should suceed");
+        Ok(*excuses.last().expect("input array is non-empty"))
+    }
+
+    fn populate_excuses(&mut self, excuses: &types::ExcuseArray) -> Result<(), types::Errno> {
+        let excuses = &mut *excuses
+            .as_ref_mut()
+            .expect("dereferencing GuestArrayMut should succeed");
+        for excuse in excuses.iter_mut() {
+            *excuse = types::Excuse::Sleeping;
+        }
+        Ok(())
+    }
 }
 // Errno is used as a first return value in the functions above, therefore
 // it must implement GuestErrorType with type Context = WasiCtx.
@@ -125,10 +146,14 @@ impl HostMemory {
     }
     pub fn mem_area_strat(align: u32) -> BoxedStrategy<MemArea> {
         prop::num::u32::ANY
-            .prop_map(move |p| {
+            .prop_filter_map("needs to fit in memory", move |p| {
                 let p_aligned = p - (p % align); // Align according to argument
                 let ptr = p_aligned % 4096; // Put inside memory
-                MemArea { ptr, len: align }
+                if ptr + align < 4096 {
+                    Some(MemArea { ptr, len: align })
+                } else {
+                    None
+                }
             })
             .boxed()
     }
@@ -539,6 +564,204 @@ impl SumPairPtrsExercise {
 proptest! {
     #[test]
     fn sum_of_pair_of_ptrs(e in SumPairPtrsExercise::strat()) {
+        e.test()
+    }
+}
+
+#[derive(Debug)]
+struct ReduceExcusesExcercise {
+    input_ptr_loc: MemArea,
+    input_len_loc: MemArea,
+    input_array_loc: MemArea,
+    input_array_len: u32,
+    return_ptr_loc: MemArea,
+}
+
+impl ReduceExcusesExcercise {
+    pub fn strat() -> BoxedStrategy<Self> {
+        (1..256u32)
+            .prop_flat_map(|len| {
+                (
+                    HostMemory::mem_area_strat(4),
+                    HostMemory::mem_area_strat(4),
+                    HostMemory::mem_area_strat(types::Excuse::size() * len),
+                    Just(len),
+                    HostMemory::mem_area_strat(4),
+                )
+            })
+            .prop_map(
+                |(
+                    input_ptr_loc,
+                    input_len_loc,
+                    input_array_loc,
+                    input_array_len,
+                    return_ptr_loc,
+                )| {
+                    Self {
+                        input_ptr_loc,
+                        input_len_loc,
+                        input_array_loc,
+                        input_array_len,
+                        return_ptr_loc,
+                    }
+                },
+            )
+            .prop_filter("non-overlapping pointers", |e| {
+                non_overlapping_set(&[
+                    &e.input_ptr_loc,
+                    &e.input_len_loc,
+                    &e.input_array_loc,
+                    &e.return_ptr_loc,
+                ])
+            })
+            .boxed()
+    }
+
+    pub fn test(&self) {
+        let mut ctx = WasiCtx::new();
+        let mut host_memory = HostMemory::new();
+        let mut guest_memory = GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+        let input_vec: Vec<_> = vec![
+            types::Excuse::DogAte,
+            types::Excuse::Traffic,
+            types::Excuse::Sleeping,
+        ]
+        .into_iter()
+        .cycle()
+        .take(self.input_array_len as usize)
+        .collect();
+
+        *guest_memory
+            .ptr_mut(self.input_ptr_loc.ptr)
+            .expect("input ptr")
+            .as_ref_mut()
+            .expect("deref to ref_mut") = self.input_array_loc.ptr;
+        *guest_memory
+            .ptr_mut(self.input_len_loc.ptr)
+            .expect("input len")
+            .as_ref_mut()
+            .expect("deref to ref mut") = self.input_array_len;
+        {
+            let arr = {
+                let ptr: wiggle_runtime::GuestPtrMut<'_, types::Excuse> = guest_memory
+                    .ptr_mut(self.input_array_loc.ptr)
+                    .expect("input ptr");
+                &mut *ptr
+                    .array_mut(self.input_array_len)
+                    .expect("as array_mut")
+                    .as_ref_mut()
+                    .expect("deref to &mut []")
+            };
+            for (i, el) in input_vec.iter().enumerate() {
+                arr[i] = *el;
+            }
+        }
+
+        let res = foo::reduce_excuses(
+            &mut ctx,
+            &mut guest_memory,
+            self.input_ptr_loc.ptr as i32,
+            self.input_len_loc.ptr as i32,
+            self.return_ptr_loc.ptr as i32,
+        );
+
+        assert_eq!(res, types::Errno::Ok.into(), "reduce excuses errno");
+
+        let expected = input_vec.last().expect("input vec should be non-empty");
+        let given: &types::Excuse = &*guest_memory
+            .ptr(self.return_ptr_loc.ptr)
+            .expect("reduced ptr")
+            .as_ref()
+            .expect("reduced ref");
+        assert_eq!(expected, given, "reduce excuses return val");
+    }
+}
+proptest! {
+    #[test]
+    fn reduce_excuses(e in ReduceExcusesExcercise::strat()) {
+        e.test()
+    }
+}
+
+#[derive(Debug)]
+struct PopulateExcusesExcercise {
+    input_ptr_loc: MemArea,
+    input_len_loc: MemArea,
+    input_array_loc: MemArea,
+    input_array_len: u32,
+}
+
+impl PopulateExcusesExcercise {
+    pub fn strat() -> BoxedStrategy<Self> {
+        (1..256u32)
+            .prop_flat_map(|len| {
+                (
+                    HostMemory::mem_area_strat(4),
+                    HostMemory::mem_area_strat(4),
+                    HostMemory::mem_area_strat(types::Excuse::size() * len),
+                    Just(len),
+                )
+            })
+            .prop_map(
+                |(input_ptr_loc, input_len_loc, input_array_loc, input_array_len)| Self {
+                    input_ptr_loc,
+                    input_len_loc,
+                    input_array_loc,
+                    input_array_len,
+                },
+            )
+            .prop_filter("non-overlapping pointers", |e| {
+                non_overlapping_set(&[&e.input_ptr_loc, &e.input_len_loc, &e.input_array_loc])
+            })
+            .boxed()
+    }
+
+    pub fn test(&self) {
+        let mut ctx = WasiCtx::new();
+        let mut host_memory = HostMemory::new();
+        let mut guest_memory = GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+
+        *guest_memory
+            .ptr_mut(self.input_ptr_loc.ptr)
+            .expect("input ptr")
+            .as_ref_mut()
+            .expect("deref to ref_mut") = self.input_array_loc.ptr;
+        *guest_memory
+            .ptr_mut(self.input_len_loc.ptr)
+            .expect("input len")
+            .as_ref_mut()
+            .expect("deref to ref mut") = self.input_array_len;
+
+        let res = foo::populate_excuses(
+            &mut ctx,
+            &mut guest_memory,
+            self.input_ptr_loc.ptr as i32,
+            self.input_len_loc.ptr as i32,
+        );
+        assert_eq!(res, types::Errno::Ok.into(), "populate excuses errno");
+
+        let arr = {
+            let ptr: wiggle_runtime::GuestPtr<'_, types::Excuse> = guest_memory
+                .ptr(self.input_array_loc.ptr)
+                .expect("input ptr");
+            &*ptr
+                .array(self.input_array_len)
+                .expect("as array")
+                .as_ref()
+                .expect("deref to &[]")
+        };
+        for el in arr {
+            assert_eq!(
+                *el,
+                types::Excuse::Sleeping,
+                "element should equal Excuse::Sleeping"
+            );
+        }
+    }
+}
+proptest! {
+    #[test]
+    fn populate_excuses(e in PopulateExcusesExcercise::strat()) {
         e.test()
     }
 }

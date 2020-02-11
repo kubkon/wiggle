@@ -33,10 +33,10 @@ where
     pub fn as_ref(&self) -> Result<GuestArrayRef<'a, T>, GuestError> {
         let mut ptr = self.ptr.clone();
         for _ in 0..self.num_elems {
-            ptr = ptr.elem(1)?;
             T::validate(&ptr)?;
+            ptr = ptr.elem(1)?;
         }
-        let region = self.ptr.region.extend((self.num_elems - 1) * T::size());
+        let region = self.ptr.region.extend(self.num_elems);
         let handle = {
             let mut borrows = self.ptr.mem.borrows.borrow_mut();
             borrows
@@ -129,10 +129,10 @@ where
     pub fn as_ref_mut(&self) -> Result<GuestArrayRefMut<'a, T>, GuestError> {
         let mut ptr = self.ptr.as_immut();
         for _ in 0..self.num_elems {
-            ptr = ptr.elem(1)?;
             T::validate(&ptr)?;
+            ptr = ptr.elem(1)?;
         }
-        let region = self.ptr.region.extend((self.num_elems - 1) * T::size());
+        let region = self.ptr.region.extend(self.num_elems);
         let handle = {
             let mut borrows = self.ptr.mem.borrows.borrow_mut();
             borrows

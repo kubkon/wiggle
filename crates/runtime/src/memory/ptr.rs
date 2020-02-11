@@ -47,7 +47,7 @@ impl<'a, T: GuestType> GuestPtr<'a, T> {
     }
 
     pub fn array(&self, num_elems: u32) -> Result<GuestArray<'a, T>, GuestError> {
-        let region = self.region.extend((num_elems - 1) * T::size());
+        let region = self.region.extend(num_elems);
         if self.mem.contains(region) {
             let ptr = GuestPtr {
                 mem: self.mem,
@@ -196,7 +196,7 @@ where
     }
 
     pub fn array_mut(&self, num_elems: u32) -> Result<GuestArrayMut<'a, T>, GuestError> {
-        let region = self.region.extend((num_elems - 1) * T::size());
+        let region = self.region.extend(num_elems);
         if self.mem.contains(region) {
             let ptr = GuestPtrMut {
                 mem: self.mem,
