@@ -1,5 +1,5 @@
 use proptest::prelude::*;
-use wiggle_memory::{
+use wiggle_runtime::{
     GuestError, GuestErrorType, GuestMemory, GuestPtr, GuestPtrMut, GuestRef, GuestRefMut,
 };
 

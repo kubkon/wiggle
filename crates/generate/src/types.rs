@@ -24,11 +24,11 @@ pub fn define_datatype(names: &Names, namedtype: &witx::NamedType) -> TokenStrea
             witx::Type::Pointer(p) => define_witx_pointer(
                 names,
                 &namedtype.name,
-                quote!(wiggle_memory::GuestPtrMut),
+                quote!(wiggle_runtime::GuestPtrMut),
                 p,
             ),
             witx::Type::ConstPointer(p) => {
-                define_witx_pointer(names, &namedtype.name, quote!(wiggle_memory::GuestPtr), p)
+                define_witx_pointer(names, &namedtype.name, quote!(wiggle_runtime::GuestPtr), p)
             }
             witx::Type::Array { .. } => unimplemented!("array types"),
         },
@@ -72,18 +72,18 @@ fn define_enum(names: &Names, name: &witx::Id, e: &witx::EnumDatatype) -> TokenS
         }
 
         impl ::std::convert::TryFrom<#repr> for #ident {
-            type Error = wiggle_memory::GuestError;
-            fn try_from(value: #repr) -> Result<#ident, wiggle_memory::GuestError> {
+            type Error = wiggle_runtime::GuestError;
+            fn try_from(value: #repr) -> Result<#ident, wiggle_runtime::GuestError> {
                 match value as usize {
                     #(#tryfrom_repr_cases),*,
-                    _ => Err(wiggle_memory::GuestError::InvalidEnumValue(stringify!(#ident))),
+                    _ => Err(wiggle_runtime::GuestError::InvalidEnumValue(stringify!(#ident))),
                 }
             }
         }
 
         impl ::std::convert::TryFrom<#abi_repr> for #ident {
-            type Error = wiggle_memory::GuestError;
-            fn try_from(value: #abi_repr) -> Result<#ident, wiggle_memory::GuestError> {
+            type Error = wiggle_runtime::GuestError;
+            fn try_from(value: #abi_repr) -> Result<#ident, wiggle_runtime::GuestError> {
                 #ident::try_from(value as #repr)
             }
         }
@@ -102,7 +102,7 @@ fn define_enum(names: &Names, name: &witx::Id, e: &witx::EnumDatatype) -> TokenS
             }
         }
 
-        impl wiggle_memory::GuestType for #ident {
+        impl wiggle_runtime::GuestType for #ident {
             fn size() -> u32 {
                 ::std::mem::size_of::<#repr>() as u32
             }
@@ -112,7 +112,7 @@ fn define_enum(names: &Names, name: &witx::Id, e: &witx::EnumDatatype) -> TokenS
             fn name() -> String {
                 stringify!(#ident).to_owned()
             }
-            fn validate<'a>(location: &wiggle_memory::GuestPtr<'a, #ident>) -> Result<(), wiggle_memory::GuestError> {
+            fn validate<'a>(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<(), wiggle_runtime::GuestError> {
                 use ::std::convert::TryFrom;
                 let raw: #repr = unsafe { (location.as_raw() as *const #repr).read() };
                 let _ = #ident::try_from(raw)?;
@@ -120,15 +120,15 @@ fn define_enum(names: &Names, name: &witx::Id, e: &witx::EnumDatatype) -> TokenS
             }
         }
 
-        impl wiggle_memory::GuestTypeCopy for #ident {}
-        impl wiggle_memory::GuestTypeClone for #ident {
-            fn read_from_guest(location: &wiggle_memory::GuestPtr<#ident>) -> Result<#ident, wiggle_memory::GuestError> {
+        impl wiggle_runtime::GuestTypeCopy for #ident {}
+        impl wiggle_runtime::GuestTypeClone for #ident {
+            fn read_from_guest(location: &wiggle_runtime::GuestPtr<#ident>) -> Result<#ident, wiggle_runtime::GuestError> {
                 use ::std::convert::TryFrom;
                 let raw: #repr = unsafe { (location.as_raw() as *const #repr).read() };
                 let val = #ident::try_from(raw)?;
                 Ok(val)
             }
-            fn write_to_guest(&self, location: &wiggle_memory::GuestPtrMut<#ident>) {
+            fn write_to_guest(&self, location: &wiggle_runtime::GuestPtrMut<#ident>) {
                 let val: #repr = #repr::from(*self);
                 unsafe { (location.as_raw() as *mut #repr).write(val) };
             }
@@ -195,13 +195,13 @@ fn define_copy_struct(names: &Names, name: &witx::Id, s: &witx::StructDatatype) 
         quote! {
             #type_::validate(
                 &ptr.cast(#offset).map_err(|e|
-                    wiggle_memory::GuestError::InDataField{
+                    wiggle_runtime::GuestError::InDataField{
                         typename: stringify!(#ident).to_owned(),
                         field: stringify!(#fieldname).to_owned(),
                         err: Box::new(e),
                     })?
                 ).map_err(|e|
-                    wiggle_memory::GuestError::InDataField {
+                    wiggle_runtime::GuestError::InDataField {
                         typename: stringify!(#ident).to_owned(),
                         field: stringify!(#fieldname).to_owned(),
                         err: Box::new(e),
@@ -216,7 +216,7 @@ fn define_copy_struct(names: &Names, name: &witx::Id, s: &witx::StructDatatype) 
             #(#member_decls),*
         }
 
-        impl wiggle_memory::GuestType for #ident {
+        impl wiggle_runtime::GuestType for #ident {
             fn size() -> u32 {
                 #size
             }
@@ -226,12 +226,12 @@ fn define_copy_struct(names: &Names, name: &witx::Id, s: &witx::StructDatatype) 
             fn name() -> String {
                 stringify!(#ident).to_owned()
             }
-            fn validate(ptr: &wiggle_memory::GuestPtr<#ident>) -> Result<(), wiggle_memory::GuestError> {
+            fn validate(ptr: &wiggle_runtime::GuestPtr<#ident>) -> Result<(), wiggle_runtime::GuestError> {
                 #(#member_valids)*
                 Ok(())
             }
         }
-        impl wiggle_memory::GuestTypeCopy for #ident {}
+        impl wiggle_runtime::GuestTypeCopy for #ident {}
     }
 }
 
@@ -249,11 +249,11 @@ fn define_ptr_struct(names: &Names, name: &witx::Id, s: &witx::StructDatatype) -
                 witx::Type::Builtin(builtin) => names.builtin_type(*builtin),
                 witx::Type::Pointer(pointee) => {
                     let pointee_type = names.type_ref(&pointee, quote!('a));
-                    quote!(wiggle_memory::GuestPtrMut<'a, #pointee_type>)
+                    quote!(wiggle_runtime::GuestPtrMut<'a, #pointee_type>)
                 }
                 witx::Type::ConstPointer(pointee) => {
                     let pointee_type = names.type_ref(&pointee, quote!('a));
-                    quote!(wiggle_memory::GuestPtr<'a, #pointee_type>)
+                    quote!(wiggle_runtime::GuestPtr<'a, #pointee_type>)
                 }
                 _ => unimplemented!("other anonymous struct members"),
             },
@@ -267,11 +267,11 @@ fn define_ptr_struct(names: &Names, name: &witx::Id, s: &witx::StructDatatype) -
                 witx::Type::Builtin(builtin) => names.builtin_type(*builtin),
                 witx::Type::Pointer(pointee) => {
                     let pointee_type = names.type_ref(&pointee, anon_lifetime());
-                    quote!(wiggle_memory::GuestPtrMut::<#pointee_type>)
+                    quote!(wiggle_runtime::GuestPtrMut::<#pointee_type>)
                 }
                 witx::Type::ConstPointer(pointee) => {
                     let pointee_type = names.type_ref(&pointee, anon_lifetime());
-                    quote!(wiggle_memory::GuestPtr::<#pointee_type>)
+                    quote!(wiggle_runtime::GuestPtr::<#pointee_type>)
                 }
                 _ => unimplemented!("other anonymous struct members"),
             },
@@ -281,13 +281,13 @@ fn define_ptr_struct(names: &Names, name: &witx::Id, s: &witx::StructDatatype) -
         quote! {
             #type_::validate(
                 &ptr.cast(#offset).map_err(|e|
-                    wiggle_memory::GuestError::InDataField{
+                    wiggle_runtime::GuestError::InDataField{
                         typename: stringify!(#ident).to_owned(),
                         field: stringify!(#fieldname).to_owned(),
                         err: Box::new(e),
                     })?
                 ).map_err(|e|
-                    wiggle_memory::GuestError::InDataField {
+                    wiggle_runtime::GuestError::InDataField {
                         typename: stringify!(#ident).to_owned(),
                         field: stringify!(#fieldname).to_owned(),
                         err: Box::new(e),
@@ -315,13 +315,13 @@ fn define_ptr_struct(names: &Names, name: &witx::Id, s: &witx::StructDatatype) -
                 witx::Type::Pointer(pointee) => {
                     let pointee_type = names.type_ref(&pointee, anon_lifetime());
                     quote! {
-                        let #name = wiggle_memory::GuestPtrMut::<#pointee_type>::read_from_guest(&location.cast(#offset)?)?;
+                        let #name = wiggle_runtime::GuestPtrMut::<#pointee_type>::read_from_guest(&location.cast(#offset)?)?;
                     }
                 }
                 witx::Type::ConstPointer(pointee) => {
                     let pointee_type = names.type_ref(&pointee, anon_lifetime());
                     quote! {
-                        let #name = wiggle_memory::GuestPtr::<#pointee_type>::read_from_guest(&location.cast(#offset)?)?;
+                        let #name = wiggle_runtime::GuestPtr::<#pointee_type>::read_from_guest(&location.cast(#offset)?)?;
                     }
                 }
                 _ => unimplemented!("other anonymous struct members"),
@@ -341,7 +341,7 @@ fn define_ptr_struct(names: &Names, name: &witx::Id, s: &witx::StructDatatype) -
             #(#member_decls),*
         }
 
-        impl<'a> wiggle_memory::GuestType for #ident<'a> {
+        impl<'a> wiggle_runtime::GuestType for #ident<'a> {
             fn size() -> u32 {
                 #size
             }
@@ -351,17 +351,17 @@ fn define_ptr_struct(names: &Names, name: &witx::Id, s: &witx::StructDatatype) -
             fn name() -> String {
                 stringify!(#ident).to_owned()
             }
-            fn validate(ptr: &wiggle_memory::GuestPtr<#ident>) -> Result<(), wiggle_memory::GuestError> {
+            fn validate(ptr: &wiggle_runtime::GuestPtr<#ident>) -> Result<(), wiggle_runtime::GuestError> {
                 #(#member_valids)*
                 Ok(())
             }
         }
-        impl<'a> wiggle_memory::GuestTypePtr<'a> for #ident<'a> {
-            fn read_from_guest(location: &wiggle_memory::GuestPtr<'a, #ident<'a>>) -> Result<#ident<'a>, wiggle_memory::GuestError> {
+        impl<'a> wiggle_runtime::GuestTypePtr<'a> for #ident<'a> {
+            fn read_from_guest(location: &wiggle_runtime::GuestPtr<'a, #ident<'a>>) -> Result<#ident<'a>, wiggle_runtime::GuestError> {
                 #(#member_reads)*
                 Ok(#ident { #(#member_names),* })
             }
-            fn write_to_guest(&self, location: &wiggle_memory::GuestPtrMut<'a, Self>) {
+            fn write_to_guest(&self, location: &wiggle_runtime::GuestPtrMut<'a, Self>) {
                 #(#member_writes)*
             }
         }

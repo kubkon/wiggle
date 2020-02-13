@@ -1,5 +1,5 @@
 [package]
-name = "wiggle-memory"
+name = "wiggle-runtime"
 version = "0.1.0"
 authors = ["Pat Hickey <phickey@fastly.com>", "Jakub Konka <kubkon@jakubkonka.com>"]
 edition = "2018"
