@@ -243,8 +243,7 @@ fn marshal_arg(
             }
         }
         witx::Type::Array(arr) => {
-            let lifetime = anon_lifetime();
-            let pointee_type = names.type_ref(arr, lifetime.clone());
+            let pointee_type = names.type_ref(arr, anon_lifetime());
             let ptr_name = names.func_ptr_binding(&param.name);
             let len_name = names.func_len_binding(&param.name);
             let name = names.func_param(&param.name);
@@ -260,14 +259,9 @@ fn marshal_arg(
                         #error_handling
                     }
                 };
-                let #name = match memory.ptr_mut::<wiggle_runtime::GuestPtrMut<#lifetime, #pointee_type>>(#ptr_name as u32) {
-                    Ok(p) => match p.read_ptr_from_guest() {
-                        Ok(r) => match r.array_mut(*num_elems) {
-                            Ok(s) => s,
-                            Err(e) => {
-                                #error_handling
-                            }
-                        }
+                let #name = match memory.ptr::<#pointee_type>(#ptr_name as u32) {
+                    Ok(p) => match p.array(*num_elems) {
+                        Ok(s) => s,
                         Err(e) => {
                             #error_handling
                         }

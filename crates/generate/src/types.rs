@@ -383,10 +383,7 @@ fn define_witx_pointer(
 fn define_witx_array(names: &Names, name: &witx::Id, arr_raw: &witx::TypeRef) -> TokenStream {
     let ident = names.type_(name);
     let pointee_type = names.type_ref(arr_raw, quote!('a));
-
-    // TODO with current witx, it seems impossible to specify the mutability
-    // of guest array types
-    quote!(pub type #ident<'a> = wiggle_runtime::GuestArrayMut<'a, #pointee_type>;)
+    quote!(pub type #ident<'a> = wiggle_runtime::GuestArray<'a, #pointee_type>;)
 }
 
 fn int_repr_tokens(int_repr: witx::IntRepr) -> TokenStream {

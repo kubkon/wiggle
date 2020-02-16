@@ -25,7 +25,8 @@
 (typename $named_ptr (@witx pointer f32))
 (typename $named_ptr_to_ptr (@witx pointer (@witx pointer f64)))
 
-(typename $excuse_array (array $excuse))
+(typename $const_excuse_array (array (@witx const_pointer $excuse)))
+(typename $excuse_array (array (@witx pointer $excuse)))
 
 (module $foo
   (@interface func (export "bar")
@@ -51,7 +52,7 @@
     (result $error $errno)
     (result $doubled s64))
   (@interface func (export "reduce_excuses")
-    (param $excuses $excuse_array)
+    (param $excuses $const_excuse_array)
     (result $error $errno)
     (result $reduced $excuse)
   )
