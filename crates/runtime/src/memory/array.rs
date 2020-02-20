@@ -1,5 +1,5 @@
 use super::ptr::{GuestPtr, GuestRef};
-use crate::{GuestError, GuestType, GuestTypeClone, GuestTypeCopy};
+use crate::{GuestError, GuestType, GuestTypeCopy};
 use std::{fmt, ops::Deref};
 
 #[derive(Clone)]
@@ -146,9 +146,9 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::super::{
-        ptr::{GuestPtr, GuestPtrMut},
-        GuestError, GuestMemory, Region,
+    use crate::{
+        memory::ptr::{GuestPtr, GuestPtrMut},
+        GuestError, GuestMemory, GuestTypeClone, Region,
     };
 
     #[repr(align(4096))]
@@ -249,9 +249,7 @@ mod test {
         let contents = arr
             .iter()
             .map(|ptr_ptr| {
-                *ptr_ptr
-                    .expect("valid ptr to ptr")
-                    .read_ptr_from_guest()
+                *GuestTypeClone::read_from_guest(&ptr_ptr.expect("valid ptr to ptr"))
                     .expect("valid ptr to some value")
                     .as_ref()
                     .expect("deref ptr to some value")
