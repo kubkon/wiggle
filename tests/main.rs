@@ -138,6 +138,11 @@ impl foo::Foo for WasiCtx {
     }
 
     fn hello_string(&mut self, a_string: &GuestString<'_>) -> Result<(), types::Errno> {
+        let as_ref = a_string.as_ref().expect("deref ptr should succeed");
+        println!(
+            "a_string='{}'",
+            as_ref.as_str().expect("valid UTF-8 string")
+        );
         Ok(())
     }
 }
