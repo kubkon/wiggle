@@ -181,10 +181,7 @@ fn define_flags(names: &Names, name: &witx::Id, f: &witx::FlagsDatatype) -> Toke
         impl wiggle_runtime::GuestTypeCopy for #ident {}
         impl wiggle_runtime::GuestTypeClone for #ident {
             fn read_from_guest(location: &wiggle_runtime::GuestPtr<#ident>) -> Result<#ident, wiggle_runtime::GuestError> {
-                use ::std::convert::TryFrom;
-                let raw: #repr = unsafe { (location.as_raw() as *const #repr).read() };
-                let val = #ident::try_from(raw)?;
-                Ok(val)
+                Ok(*location.as_ref()?)
             }
             fn write_to_guest(&self, location: &wiggle_runtime::GuestPtrMut<#ident>) {
                 let val: #repr = #repr::from(*self);
