@@ -1,7 +1,8 @@
 use super::ptr::{GuestPtr, GuestRef};
-use crate::{GuestError, GuestType, GuestTypeCopy};
+use crate::{GuestError, GuestType, GuestTypeClone, GuestTypeCopy};
 use std::{fmt, ops::Deref};
 
+#[derive(Clone)]
 pub struct GuestArray<'a, T>
 where
     T: GuestType,
