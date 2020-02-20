@@ -286,13 +286,17 @@ fn define_enum(names: &Names, name: &witx::Id, e: &witx::EnumDatatype) -> TokenS
 fn define_builtin(names: &Names, name: &witx::Id, builtin: witx::BuiltinType) -> TokenStream {
     let ident = names.type_(name);
     let built = names.builtin_type(builtin);
-    quote!(pub type #ident = #built;)
+    if let witx::BuiltinType::String = builtin {
+        quote!(pub type #ident<'a> = #built<'a>;)
+    } else {
+        quote!(pub type #ident = #built;)
+    }
 }
 
 pub fn type_needs_lifetime(tref: &witx::TypeRef) -> bool {
     match &*tref.type_() {
         witx::Type::Builtin(b) => match b {
-            witx::BuiltinType::String => unimplemented!(),
+            witx::BuiltinType::String => true,
             _ => false,
         },
         witx::Type::Enum { .. }

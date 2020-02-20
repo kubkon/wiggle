@@ -181,7 +181,23 @@ fn marshal_arg(
                     let #name = #name as #interface_typename;
                 }
             }
-            witx::BuiltinType::String => unimplemented!("string types unimplemented"),
+            witx::BuiltinType::String => {
+                let arg_name = names.func_ptr_binding(&param.name);
+                let name = names.func_param(&param.name);
+                quote! {
+                    let #name = match memory.ptr::<u8>(#arg_name as u32) {
+                        Ok(p) => match p.string() {
+                            Ok(s) => s,
+                            Err(e) => {
+                                #error_handling
+                            }
+                        }
+                        Err(e) => {
+                            #error_handling
+                        }
+                    };
+                }
+            }
         },
         witx::Type::Pointer(pointee) => {
             let pointee_type = names.type_ref(pointee, anon_lifetime());

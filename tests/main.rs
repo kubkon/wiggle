@@ -2,7 +2,7 @@ use proptest::prelude::*;
 use std::convert::TryFrom;
 use wiggle_runtime::{
     GuestArray, GuestError, GuestErrorType, GuestMemory, GuestPtr, GuestPtrMut, GuestRef,
-    GuestRefMut,
+    GuestRefMut, GuestString,
 };
 
 wiggle_generate::from_witx!({
@@ -137,7 +137,7 @@ impl foo::Foo for WasiCtx {
         Ok(old_config ^ other_config)
     }
 
-    fn hello_string(&mut self, a_string: GuestString) -> Result<(), types::Errno> {
+    fn hello_string(&mut self, a_string: &GuestString<'_>) -> Result<(), types::Errno> {
         Ok(())
     }
 }

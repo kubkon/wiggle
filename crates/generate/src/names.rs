@@ -24,7 +24,7 @@ impl Names {
     }
     pub fn builtin_type(&self, b: BuiltinType) -> TokenStream {
         match b {
-            BuiltinType::String => quote!(String),
+            BuiltinType::String => quote!(wiggle_runtime::GuestString),
             BuiltinType::U8 => quote!(u8),
             BuiltinType::U16 => quote!(u16),
             BuiltinType::U32 => quote!(u32),
@@ -35,7 +35,7 @@ impl Names {
             BuiltinType::S64 => quote!(i64),
             BuiltinType::F32 => quote!(f32),
             BuiltinType::F64 => quote!(f64),
-            BuiltinType::Char8 => quote!(char),
+            BuiltinType::Char8 => quote!(u8),
             BuiltinType::USize => quote!(usize),
         }
     }
