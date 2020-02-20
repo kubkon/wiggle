@@ -27,4 +27,7 @@ pub enum GuestError {
         #[source]
         err: Box<GuestError>,
     },
+    // FIXME the error should be more verbose and should print all valid_up_to chars
+    #[error("Invalid UTF-8 encountered")]
+    InvalidUtf8,
 }

@@ -136,6 +136,10 @@ impl foo::Foo for WasiCtx {
         })?;
         Ok(old_config ^ other_config)
     }
+
+    fn hello_string(&mut self, a_string: GuestString) -> Result<(), types::Errno> {
+        Ok(())
+    }
 }
 // Errno is used as a first return value in the functions above, therefore
 // it must implement GuestErrorType with type Context = WasiCtx.

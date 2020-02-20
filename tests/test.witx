@@ -72,4 +72,8 @@
     (result $error $errno)
     (result $new_config $car_config)
   )
+  (@interface func (export "hello_string")
+    (param $a_string string)
+    (result $error $errno)
+  )
 )
