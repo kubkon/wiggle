@@ -60,8 +60,8 @@ impl<'a> GuestPtr<'a, u8> {
         // WASI strings are null-terminated UTF-8 strings, so search for null
         let len = unsafe {
             std::ffi::CStr::from_ptr(self.as_raw() as *const _)
-                .to_bytes()
-                .len()
+                .to_bytes_with_nul() // we take into account the null-byte so that later
+                .len() // we can properly mark entire memory chunk as borrowed
         };
         let array = self.array(len as u32)?;
         Ok(GuestString { array })
