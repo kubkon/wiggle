@@ -139,10 +139,8 @@ impl foo::Foo for WasiCtx {
 
     fn hello_string(&mut self, a_string: &GuestString<'_>) -> Result<(), types::Errno> {
         let as_ref = a_string.as_ref().expect("deref ptr should succeed");
-        println!(
-            "a_string='{}'",
-            as_ref.as_str().expect("valid UTF-8 string")
-        );
+        let as_str = as_ref.as_str().expect("valid UTF-8 string");
+        println!("a_string='{}'", as_str);
         Ok(())
     }
 }
@@ -878,17 +876,7 @@ proptest! {
 }
 
 fn test_string_strategy() -> impl Strategy<Value = String> {
-    prop_oneof![
-        "Cześć",
-        "WASI!",
-        "H",
-        "Ho",
-        "How",
-        "Howl",
-        "?!?!?!?!?!",
-        "ąęćśźż",
-    ]
-    .boxed()
+    "\\p{Greek}{1,256}"
 }
 
 #[derive(Debug)]
