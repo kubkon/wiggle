@@ -179,7 +179,7 @@ fn define_flags(names: &Names, name: &witx::Id, f: &witx::FlagsDatatype) -> Toke
         }
 
         impl wiggle_runtime::GuestTypeCopy for #ident {}
-        impl wiggle_runtime::GuestTypeClone for #ident {
+        impl<'a> wiggle_runtime::GuestTypeClone<'a> for #ident {
             fn read_from_guest(location: &wiggle_runtime::GuestPtr<#ident>) -> Result<#ident, wiggle_runtime::GuestError> {
                 Ok(*location.as_ref()?)
             }
