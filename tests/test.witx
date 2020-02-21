@@ -18,6 +18,10 @@
     $awd
     $suv))
 
+(typename $cookie
+  (int u64
+    (const $start 0)))
+
 (typename $pair_ints
   (struct
     (field $first s32)
