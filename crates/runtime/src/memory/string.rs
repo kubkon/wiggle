@@ -41,7 +41,7 @@ impl<'a> fmt::Debug for GuestStringRef<'a> {
 
 impl<'a> GuestStringRef<'a> {
     pub fn as_str(&self) -> Result<&str, GuestError> {
-        std::str::from_utf8(&*self.ref_).map_err(|_| GuestError::InvalidUtf8)
+        std::str::from_utf8(&*self.ref_).map_err(Into::into)
     }
 }
 
@@ -116,6 +116,9 @@ mod test {
             .expect("valid null-terminated string")
             .into();
         let as_ref = guest_string.as_ref().expect("deref");
-        assert_eq!(as_ref.as_str(), Err(GuestError::InvalidUtf8));
+        match as_ref.as_str().expect_err("should fail") {
+            GuestError::InvalidUtf8(_) => {}
+            x => assert!(false, "expected GuestError::InvalidUtf8(_), got {:?}", x),
+        }
     }
 }
