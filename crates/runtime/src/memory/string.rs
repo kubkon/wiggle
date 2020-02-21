@@ -1,6 +1,6 @@
 use super::array::{GuestArray, GuestArrayRef};
 use crate::GuestError;
-use std::{fmt, ops::Deref};
+use std::fmt;
 
 pub struct GuestString<'a> {
     pub(super) array: GuestArray<'a, u8>,
@@ -23,6 +23,12 @@ impl<'a> GuestString<'a> {
     }
 }
 
+impl<'a> From<GuestArray<'a, u8>> for GuestString<'a> {
+    fn from(array: GuestArray<'a, u8>) -> Self {
+        Self { array }
+    }
+}
+
 pub struct GuestStringRef<'a> {
     pub(super) ref_: GuestArrayRef<'a, u8>,
 }
@@ -35,17 +41,18 @@ impl<'a> fmt::Debug for GuestStringRef<'a> {
 
 impl<'a> GuestStringRef<'a> {
     pub fn as_str(&self) -> Result<&str, GuestError> {
-        let bytes = self.ref_.deref();
-        let len = bytes.len();
-        std::str::from_utf8(&bytes[..len - 1]).map_err(|_| GuestError::InvalidUtf8)
+        std::str::from_utf8(&*self.ref_).map_err(|_| GuestError::InvalidUtf8)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::super::{
-        ptr::{GuestPtr, GuestPtrMut},
-        GuestError, GuestMemory,
+    use super::{
+        super::{
+            ptr::{GuestPtr, GuestPtrMut},
+            GuestError, GuestMemory,
+        },
+        GuestString,
     };
 
     #[repr(align(4096))]
@@ -68,22 +75,21 @@ mod test {
     #[test]
     fn valid_utf8() {
         let mut host_memory = HostMemory::new();
-        // poison all host's memory so that we test for null-termination
-        host_memory.buffer = [1; 4096];
         let guest_memory = GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
         // write string into memory
         let mut ptr: GuestPtrMut<u8> = guest_memory.ptr_mut(0).expect("ptr mut to start of string");
         let input_str = "cześć WASI!";
-        let mut bytes = input_str.as_bytes().to_vec();
-        bytes.push(b'\0');
-        for byte in bytes {
+        for byte in input_str.as_bytes() {
             let mut ref_mut = ptr.as_ref_mut().expect("valid deref");
-            *ref_mut = byte;
+            *ref_mut = *byte;
             ptr = ptr.elem(1).expect("next ptr");
         }
         // read the string as GuestString
         let ptr: GuestPtr<u8> = guest_memory.ptr(0).expect("ptr to start of string");
-        let guest_string = ptr.string().expect("valid null-terminated string");
+        let guest_string: GuestString<'_> = ptr
+            .array(input_str.len() as u32)
+            .expect("valid null-terminated string")
+            .into();
         let as_ref = guest_string.as_ref().expect("deref");
         assert_eq!(as_ref.as_str().expect("valid UTF-8"), input_str);
     }
@@ -96,17 +102,19 @@ mod test {
         let mut ptr: GuestPtrMut<u8> = guest_memory.ptr_mut(0).expect("ptr mut to start of string");
         let input_str = "cześć WASI!";
         let mut bytes = input_str.as_bytes().to_vec();
-        bytes.push(b'\0');
         // insert 0xFE which is an invalid UTF-8 byte
         bytes[5] = 0xfe;
-        for byte in bytes {
+        for byte in &bytes {
             let mut ref_mut = ptr.as_ref_mut().expect("valid deref");
-            *ref_mut = byte;
+            *ref_mut = *byte;
             ptr = ptr.elem(1).expect("next ptr");
         }
         // read the string as GuestString
         let ptr: GuestPtr<u8> = guest_memory.ptr(0).expect("ptr to start of string");
-        let guest_string = ptr.string().expect("valid null-terminated string");
+        let guest_string: GuestString<'_> = ptr
+            .array(bytes.len() as u32)
+            .expect("valid null-terminated string")
+            .into();
         let as_ref = guest_string.as_ref().expect("deref");
         assert_eq!(as_ref.as_str(), Err(GuestError::InvalidUtf8));
     }

@@ -182,12 +182,25 @@ fn marshal_arg(
                 }
             }
             witx::BuiltinType::String => {
-                let arg_name = names.func_ptr_binding(&param.name);
+                let lifetime = anon_lifetime();
+                let ptr_name = names.func_ptr_binding(&param.name);
+                let len_name = names.func_len_binding(&param.name);
                 let name = names.func_param(&param.name);
                 quote! {
-                    let #name = match memory.ptr::<u8>(#arg_name as u32) {
-                        Ok(p) => match p.string() {
-                            Ok(s) => s,
+                    let num_elems = match memory.ptr::<u32>(#len_name as u32) {
+                        Ok(p) => match p.as_ref() {
+                            Ok(r) => r,
+                            Err(e) => {
+                                #error_handling
+                            }
+                        }
+                        Err(e) => {
+                            #error_handling
+                        }
+                    };
+                    let #name: wiggle_runtime::GuestString<#lifetime> = match memory.ptr::<u8>(#ptr_name as u32) {
+                        Ok(p) => match p.array(*num_elems) {
+                            Ok(s) => s.into(),
                             Err(e) => {
                                 #error_handling
                             }

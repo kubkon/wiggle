@@ -1,5 +1,8 @@
-use super::{array::GuestArray, string::GuestString, GuestMemory};
-use crate::{borrow::BorrowHandle, GuestError, GuestType, GuestTypeClone, GuestTypeCopy, Region};
+use super::{array::GuestArray, GuestMemory};
+use crate::{
+    borrow::BorrowHandle, GuestError, GuestType, GuestTypeClone, GuestTypeCopy,
+    Region,
+};
 use std::{
     fmt,
     marker::PhantomData,
@@ -52,19 +55,6 @@ impl<'a, T: GuestType> GuestPtr<'a, T> {
         } else {
             Err(GuestError::PtrOutOfBounds(region))
         }
-    }
-}
-
-impl<'a> GuestPtr<'a, u8> {
-    pub fn string(&self) -> Result<GuestString<'a>, GuestError> {
-        // WASI strings are null-terminated UTF-8 strings, so search for null
-        let len = unsafe {
-            std::ffi::CStr::from_ptr(self.as_raw() as *const _)
-                .to_bytes_with_nul() // we take into account the null-byte so that later
-                .len() // we can properly mark entire memory chunk as borrowed
-        };
-        let array = self.array(len as u32)?;
-        Ok(GuestString { array })
     }
 }
 

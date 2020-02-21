@@ -876,3 +876,66 @@ proptest! {
         e.test()
     }
 }
+
+#[derive(Debug)]
+struct HelloStringExercise {
+    string_ptr_loc: MemArea,
+    string_len_loc: MemArea,
+}
+
+impl HelloStringExercise {
+    const TEST_PHRASE: &'static str = "Cześć WASI! How are you?!";
+
+    pub fn strat() -> BoxedStrategy<Self> {
+        (
+            HostMemory::mem_area_strat(Self::TEST_PHRASE.len() as u32),
+            HostMemory::mem_area_strat(4),
+        )
+            .prop_map(|(string_ptr_loc, string_len_loc)| Self {
+                string_ptr_loc,
+                string_len_loc,
+            })
+            .prop_filter("non-overlapping pointers", |e| {
+                non_overlapping_set(&[&e.string_ptr_loc, &e.string_len_loc])
+            })
+            .boxed()
+    }
+
+    pub fn test(&self) {
+        let mut ctx = WasiCtx::new();
+        let mut host_memory = HostMemory::new();
+        let mut guest_memory = GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
+
+        // Populate string length
+        *guest_memory
+            .ptr_mut(self.string_len_loc.ptr)
+            .expect("ptr mut to string len")
+            .as_ref_mut()
+            .expect("deref ptr mut to string len") = Self::TEST_PHRASE.len() as u32;
+
+        // Populate string in guest's memory
+        {
+            let mut next: GuestPtrMut<'_, u8> = guest_memory
+                .ptr_mut(self.string_ptr_loc.ptr)
+                .expect("ptr mut to the first byte of string");
+            for byte in Self::TEST_PHRASE.as_bytes() {
+                *next.as_ref_mut().expect("deref mut") = *byte;
+                next = next.elem(1).expect("increment ptr by 1");
+            }
+        }
+
+        let res = foo::hello_string(
+            &mut ctx,
+            &mut guest_memory,
+            self.string_ptr_loc.ptr as i32,
+            self.string_len_loc.ptr as i32,
+        );
+        assert_eq!(res, types::Errno::Ok.into(), "hello string errno");
+    }
+}
+proptest! {
+    #[test]
+    fn hello_string(e in HelloStringExercise::strat()) {
+        e.test()
+    }
+}
