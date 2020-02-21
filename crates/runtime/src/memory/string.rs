@@ -78,7 +78,6 @@ mod test {
         let guest_memory = GuestMemory::new(host_memory.as_mut_ptr(), host_memory.len() as u32);
         // write string into memory
         let mut ptr: GuestPtrMut<u8> = guest_memory.ptr_mut(0).expect("ptr mut to start of string");
-        // let input_str = "cześć WASI!";
         let input_str = "cześć WASI!";
         for byte in input_str.as_bytes() {
             let mut ref_mut = ptr.as_ref_mut().expect("valid deref");
