@@ -1,8 +1,5 @@
 use super::{array::GuestArray, GuestMemory};
-use crate::{
-    borrow::BorrowHandle, GuestError, GuestType, GuestTypeClone, GuestTypeCopy,
-    Region,
-};
+use crate::{borrow::BorrowHandle, GuestError, GuestType, GuestTypeClone, GuestTypeCopy, Region};
 use std::{
     fmt,
     marker::PhantomData,
