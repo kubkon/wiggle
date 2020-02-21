@@ -877,21 +877,39 @@ proptest! {
     }
 }
 
+fn test_string_strategy() -> impl Strategy<Value = String> {
+    prop_oneof![
+        "Cześć",
+        "WASI!",
+        "H",
+        "Ho",
+        "How",
+        "Howl",
+        "?!?!?!?!?!",
+        "ąęćśźż",
+    ]
+    .boxed()
+}
+
 #[derive(Debug)]
 struct HelloStringExercise {
+    test_word: String,
     string_ptr_loc: MemArea,
     string_len_loc: MemArea,
 }
 
 impl HelloStringExercise {
-    const TEST_PHRASE: &'static str = "Cześć WASI! How are you?!";
-
     pub fn strat() -> BoxedStrategy<Self> {
-        (
-            HostMemory::mem_area_strat(Self::TEST_PHRASE.len() as u32),
-            HostMemory::mem_area_strat(4),
-        )
-            .prop_map(|(string_ptr_loc, string_len_loc)| Self {
+        (test_string_strategy(),)
+            .prop_flat_map(|(test_word,)| {
+                (
+                    Just(test_word.clone()),
+                    HostMemory::mem_area_strat(test_word.len() as u32),
+                    HostMemory::mem_area_strat(4),
+                )
+            })
+            .prop_map(|(test_word, string_ptr_loc, string_len_loc)| Self {
+                test_word,
                 string_ptr_loc,
                 string_len_loc,
             })
@@ -911,14 +929,14 @@ impl HelloStringExercise {
             .ptr_mut(self.string_len_loc.ptr)
             .expect("ptr mut to string len")
             .as_ref_mut()
-            .expect("deref ptr mut to string len") = Self::TEST_PHRASE.len() as u32;
+            .expect("deref ptr mut to string len") = self.test_word.len() as u32;
 
         // Populate string in guest's memory
         {
             let mut next: GuestPtrMut<'_, u8> = guest_memory
                 .ptr_mut(self.string_ptr_loc.ptr)
                 .expect("ptr mut to the first byte of string");
-            for byte in Self::TEST_PHRASE.as_bytes() {
+            for byte in self.test_word.as_bytes() {
                 *next.as_ref_mut().expect("deref mut") = *byte;
                 next = next.elem(1).expect("increment ptr by 1");
             }
