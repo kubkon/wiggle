@@ -34,8 +34,6 @@
 (typename $const_excuse_array (array (@witx const_pointer $excuse)))
 (typename $excuse_array (array (@witx pointer $excuse)))
 
-(typename $named_ptr_to_string (@witx const_pointer string))
-
 (module $foo
   (@interface func (export "bar")
     (param $an_int u32)
@@ -77,5 +75,6 @@
   (@interface func (export "hello_string")
     (param $a_string string)
     (result $error $errno)
+    (result $total_bytes u32)
   )
 )

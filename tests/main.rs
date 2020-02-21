@@ -137,11 +137,11 @@ impl foo::Foo for WasiCtx {
         Ok(old_config ^ other_config)
     }
 
-    fn hello_string(&mut self, a_string: &GuestString<'_>) -> Result<(), types::Errno> {
+    fn hello_string(&mut self, a_string: &GuestString<'_>) -> Result<u32, types::Errno> {
         let as_ref = a_string.as_ref().expect("deref ptr should succeed");
         let as_str = as_ref.as_str().expect("valid UTF-8 string");
         println!("a_string='{}'", as_str);
-        Ok(())
+        Ok(as_str.len() as u32)
     }
 }
 // Errno is used as a first return value in the functions above, therefore
@@ -884,6 +884,7 @@ struct HelloStringExercise {
     test_word: String,
     string_ptr_loc: MemArea,
     string_len_loc: MemArea,
+    return_ptr_loc: MemArea,
 }
 
 impl HelloStringExercise {
@@ -894,15 +895,19 @@ impl HelloStringExercise {
                     Just(test_word.clone()),
                     HostMemory::mem_area_strat(test_word.len() as u32),
                     HostMemory::mem_area_strat(4),
+                    HostMemory::mem_area_strat(4),
                 )
             })
-            .prop_map(|(test_word, string_ptr_loc, string_len_loc)| Self {
-                test_word,
-                string_ptr_loc,
-                string_len_loc,
-            })
+            .prop_map(
+                |(test_word, string_ptr_loc, string_len_loc, return_ptr_loc)| Self {
+                    test_word,
+                    string_ptr_loc,
+                    string_len_loc,
+                    return_ptr_loc,
+                },
+            )
             .prop_filter("non-overlapping pointers", |e| {
-                non_overlapping_set(&[&e.string_ptr_loc, &e.string_len_loc])
+                non_overlapping_set(&[&e.string_ptr_loc, &e.string_len_loc, &e.return_ptr_loc])
             })
             .boxed()
     }
@@ -935,8 +940,16 @@ impl HelloStringExercise {
             &mut guest_memory,
             self.string_ptr_loc.ptr as i32,
             self.string_len_loc.ptr as i32,
+            self.return_ptr_loc.ptr as i32,
         );
         assert_eq!(res, types::Errno::Ok.into(), "hello string errno");
+
+        let given = *guest_memory
+            .ptr::<u32>(self.return_ptr_loc.ptr)
+            .expect("ptr to return value")
+            .as_ref()
+            .expect("deref ptr to return value");
+        assert_eq!(self.test_word.len() as u32, given);
     }
 }
 proptest! {
