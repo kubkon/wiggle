@@ -286,21 +286,36 @@ fn define_enum(names: &Names, name: &witx::Id, e: &witx::EnumDatatype) -> TokenS
         witx::IntRepr::U64 => witx::AtomType::I64,
     });
 
-    let variant_names = e.variants.iter().map(|v| names.enum_variant(&v.name));
-    let tryfrom_repr_cases = e.variants.iter().enumerate().map(|(n, v)| {
-        let variant_name = names.enum_variant(&v.name);
-        quote!(#n => Ok(#ident::#variant_name))
-    });
-    let to_repr_cases = e.variants.iter().enumerate().map(|(n, v)| {
-        let variant_name = names.enum_variant(&v.name);
-        quote!(#ident::#variant_name => #n as #repr)
-    });
+    let mut variant_names = vec![];
+    let mut tryfrom_repr_cases = vec![];
+    let mut to_repr_cases = vec![];
+    let mut to_display = vec![];
+
+    for (n, variant) in e.variants.iter().enumerate() {
+        let variant_name = names.enum_variant(&variant.name);
+        let docs = variant.docs.trim();
+        let ident_str = ident.to_string();
+        let variant_str = variant_name.to_string();
+        tryfrom_repr_cases.push(quote!(#n => Ok(#ident::#variant_name)));
+        to_repr_cases.push(quote!(#ident::#variant_name => #n as #repr));
+        to_display.push(quote!(#ident::#variant_name => format!("{} ({}::{}({}))", #docs, #ident_str, #variant_str, #repr::from(*self))));
+        variant_names.push(variant_name);
+    }
 
     quote! {
         #[repr(#repr)]
         #[derive(Copy, Clone, Debug, ::std::hash::Hash, Eq, PartialEq)]
         pub enum #ident {
             #(#variant_names),*
+        }
+
+        impl ::std::fmt::Display for #ident {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                let to_str = match self {
+                    #(#to_display,)*
+                };
+                write!(f, "{}", to_str)
+            }
         }
 
         impl ::std::convert::TryFrom<#repr> for #ident {
