@@ -33,14 +33,6 @@
 (typename $excuse_array (array (@witx pointer $excuse)))
 
 (module $foo
-  (@interface func (export "sum_of_pair")
-    (param $an_pair $pair_ints)
-    (result $error $errno)
-    (result $doubled s64))
-  (@interface func (export "sum_of_pair_of_ptrs")
-    (param $an_pair $pair_int_ptrs)
-    (result $error $errno)
-    (result $doubled s64))
   (@interface func (export "reduce_excuses")
     (param $excuses $const_excuse_array)
     (result $error $errno)
