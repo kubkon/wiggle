@@ -1,12 +1,6 @@
 (use "errno.witx")
 (use "excuse.witx")
 
-(typename $car_config
-  (flags u8
-    $automatic
-    $awd
-    $suv))
-
 (typename $cookie
   (int u64
     (const $start 0)))
@@ -16,38 +10,7 @@
     $false
     $true))
 
-(typename $pair_ints
-  (struct
-    (field $first s32)
-    (field $second s32)))
-
-(typename $pair_int_ptrs
-  (struct
-    (field $first (@witx const_pointer s32))
-    (field $second (@witx const_pointer s32))))
-
-(typename $named_ptr (@witx pointer f32))
-(typename $named_ptr_to_ptr (@witx pointer (@witx pointer f64)))
-
-(typename $const_excuse_array (array (@witx const_pointer $excuse)))
-(typename $excuse_array (array (@witx pointer $excuse)))
-
 (module $foo
-  (@interface func (export "reduce_excuses")
-    (param $excuses $const_excuse_array)
-    (result $error $errno)
-    (result $reduced $excuse)
-  )
-  (@interface func (export "populate_excuses")
-    (param $excuses $excuse_array)
-    (result $error $errno)
-  )
-  (@interface func (export "configure_car")
-    (param $old_config $car_config)
-    (param $old_config_by_ptr (@witx const_pointer $car_config))
-    (result $error $errno)
-    (result $new_config $car_config)
-  )
   (@interface func (export "hello_string")
     (param $a_string string)
     (result $error $errno)
