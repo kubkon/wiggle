@@ -1,8 +1,6 @@
 use proptest::prelude::*;
 use std::convert::TryFrom;
-use wiggle_runtime::{
-    GuestArray, GuestError, GuestPtr, GuestPtrMut, GuestRef, GuestRefMut, GuestString,
-};
+use wiggle_runtime::{GuestArray, GuestError, GuestPtr, GuestPtrMut, GuestRefMut, GuestString};
 use wiggle_test::{impl_errno, HostMemory, MemArea, WasiCtx};
 
 wiggle_generate::from_witx!({
@@ -60,10 +58,6 @@ impl foo::Foo for WasiCtx {
         input4_ptr_ptr.write_ptr_to_guest(&input2_ptr.as_immut());
 
         Ok(())
-    }
-
-    fn bat(&mut self, an_int: u32) -> Result<f32, types::Errno> {
-        Ok((an_int as f32) * 2.0)
     }
 
     fn sum_of_pair(&mut self, an_pair: &types::PairInts) -> Result<i64, types::Errno> {
@@ -138,48 +132,6 @@ impl foo::Foo for WasiCtx {
         Ok(res)
     }
 }
-#[derive(Debug)]
-struct BatExercise {
-    pub input: u32,
-    pub return_loc: MemArea,
-}
-
-impl BatExercise {
-    pub fn test(&self) {
-        let mut ctx = WasiCtx::new();
-        let mut host_memory = HostMemory::new();
-        let mut guest_memory = host_memory.guest_memory();
-
-        let bat_err = foo::bat(
-            &mut ctx,
-            &mut guest_memory,
-            self.input as i32,
-            self.return_loc.ptr as i32,
-        );
-
-        let return_val: GuestRef<f32> = guest_memory
-            .ptr(self.return_loc.ptr)
-            .expect("return loc ptr")
-            .as_ref()
-            .expect("return val ref");
-        assert_eq!(bat_err, types::Errno::Ok.into(), "bat errno");
-        assert_eq!(*return_val, (self.input as f32) * 2.0, "bat return val");
-    }
-
-    pub fn strat() -> BoxedStrategy<Self> {
-        (prop::num::u32::ANY, HostMemory::mem_area_strat(4))
-            .prop_map(|(input, return_loc)| BatExercise { input, return_loc })
-            .boxed()
-    }
-}
-
-proptest! {
-    #[test]
-    fn bat(e in BatExercise::strat()) {
-        e.test()
-    }
-}
-
 fn excuse_strat() -> impl Strategy<Value = types::Excuse> {
     prop_oneof![
         Just(types::Excuse::DogAte),
