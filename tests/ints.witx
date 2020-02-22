@@ -1,5 +1,4 @@
 (use "errno.witx")
-(use "excuse.witx")
 
 (typename $cookie
   (int u64
@@ -10,12 +9,7 @@
     $false
     $true))
 
-(module $foo
-  (@interface func (export "hello_string")
-    (param $a_string string)
-    (result $error $errno)
-    (result $total_bytes u32)
-  )
+(module $ints
   (@interface func (export "cookie_cutter")
     (param $init_cookie $cookie)
     (result $error $errno)
