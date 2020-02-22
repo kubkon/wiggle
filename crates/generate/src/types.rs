@@ -153,6 +153,8 @@ fn define_flags(names: &Names, name: &witx::Id, f: &witx::FlagsDatatype) -> Toke
     }
     let all_values_token = Literal::u128_unsuffixed(all_values);
 
+    let ident_str = ident.to_string();
+
     quote! {
         #[repr(transparent)]
         #[derive(Copy, Clone, Debug, ::std::hash::Hash, Eq, PartialEq)]
@@ -164,6 +166,12 @@ fn define_flags(names: &Names, name: &witx::Id, f: &witx::FlagsDatatype) -> Toke
 
             pub fn contains(&self, other: &#ident) -> bool {
                 #repr::from(!*self & *other) == 0 as #repr
+            }
+        }
+
+        impl ::std::fmt::Display for #ident {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                write!(f, "{}({:#b})", #ident_str, self.0)
             }
         }
 
