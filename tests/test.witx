@@ -1,10 +1,5 @@
 (use "errno.witx")
-
-(typename $excuse
-  (enum u8
-     $dog_ate
-     $traffic
-     $sleeping))
+(use "excuse.witx")
 
 (typename $car_config
   (flags u8
@@ -38,12 +33,6 @@
 (typename $excuse_array (array (@witx pointer $excuse)))
 
 (module $foo
-  (@interface func (export "baz")
-    (param $an_excuse $excuse)
-    (param $an_excuse_by_reference (@witx pointer $excuse))
-    (param $a_lamer_excuse (@witx const_pointer $excuse))
-    (param $two_layers_of_excuses (@witx pointer (@witx const_pointer $excuse)))
-    (result $error $errno))
   (@interface func (export "sum_of_pair")
     (param $an_pair $pair_ints)
     (result $error $errno)
