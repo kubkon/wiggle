@@ -72,6 +72,12 @@ fn define_int(names: &Names, name: &witx::Id, i: &witx::IntDatatype) -> TokenStr
             #(#consts;)*
         }
 
+        impl ::std::fmt::Display for #ident {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                write!(f, "{:?}", self)
+            }
+        }
+
         impl ::std::convert::TryFrom<#repr> for #ident {
             type Error = wiggle_runtime::GuestError;
             fn try_from(value: #repr) -> Result<Self, wiggle_runtime::GuestError> {
