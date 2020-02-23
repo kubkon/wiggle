@@ -34,6 +34,13 @@ impl structs::Structs for WasiCtx {
         let second = an_pair.second as i64;
         Ok(first as i64 + second)
     }
+
+    fn return_pair_ints(&mut self) -> Result<types::PairInts, types::Errno> {
+        Ok(types::PairInts {
+            first: 10,
+            second: 20,
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -295,5 +302,51 @@ proptest! {
     #[test]
     fn sum_of_int_and_ptr(e in SumIntAndPtrExercise::strat()) {
         e.test()
+    }
+}
+
+#[derive(Debug)]
+struct ReturnPairInts {
+    pub return_loc: MemArea,
+}
+
+impl ReturnPairInts {
+    pub fn strat() -> BoxedStrategy<Self> {
+        HostMemory::mem_area_strat(8)
+            .prop_map(|return_loc| ReturnPairInts { return_loc })
+            .boxed()
+    }
+
+    pub fn test(&self) {
+        let mut ctx = WasiCtx::new();
+        let mut host_memory = HostMemory::new();
+        let mut guest_memory = host_memory.guest_memory();
+
+        let err =
+            structs::return_pair_ints(&mut ctx, &mut guest_memory, self.return_loc.ptr as i32);
+
+        assert_eq!(err, types::Errno::Ok.into(), "return struct errno");
+
+        let return_struct: types::PairInts = *guest_memory
+            .ptr(self.return_loc.ptr)
+            .expect("return ptr")
+            .as_ref()
+            .expect("return ref");
+
+        assert_eq!(
+            return_struct,
+            types::PairInts {
+                first: 10,
+                second: 20
+            },
+            "return_pair_ints return value"
+        );
+    }
+}
+
+proptest! {
+    #[test]
+    fn return_pair_ints(e in ReturnPairInts::strat()) {
+        e.test();
     }
 }

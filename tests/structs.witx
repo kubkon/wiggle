@@ -29,4 +29,7 @@
     (param $an_pair $pair_int_and_ptr)
     (result $error $errno)
     (result $double s64))
+  (@interface func (export "return_pair_ints")
+    (result $error $errno)
+    (result $an_pair $pair_ints))
 )
