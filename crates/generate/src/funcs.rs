@@ -141,11 +141,13 @@ fn marshal_arg(
     let try_into_conversion = {
         let name = names.func_param(&param.name);
         quote! {
-            use ::std::convert::TryInto;
-            let #name: #interface_typename = match #name.try_into() {
-                Ok(a) => a,
-                Err(e) => {
-                    #error_handling
+            let #name: #interface_typename = {
+                use ::std::convert::TryInto;
+                match #name.try_into() {
+                    Ok(a) => a,
+                    Err(e) => {
+                        #error_handling
+                    }
                 }
             };
         }
@@ -361,6 +363,7 @@ where
             witx::BuiltinType::String => unimplemented!("string types"),
         },
         witx::Type::Enum(_) | witx::Type::Flags(_) | witx::Type::Int(_) => write_val_to_ptr,
-        _ => unimplemented!("marshal result"),
+        witx::Type::Struct(s) if struct_is_copy(&s) => write_val_to_ptr,
+        _ => unimplemented!("missing marshalling result for {:?}", &*tref.type_()),
     }
 }
