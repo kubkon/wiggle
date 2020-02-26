@@ -324,15 +324,9 @@ where
         // core type is given func_ptr_binding name.
         let ptr_name = names.func_ptr_binding(&result.name);
         let ptr_err_handling = error_handling(&format!("{}:result_ptr_mut", result.name.as_str()));
-        let ref_err_handling = error_handling(&format!("{}:result_ref_mut", result.name.as_str()));
         let pre = quote! {
             let mut #ptr_name = match memory.ptr_mut::<#pointee_type>(#ptr_name as u32) {
-                Ok(p) => match p.as_ref_mut() {
-                    Ok(r) => r,
-                    Err(e) => {
-                        #ref_err_handling
-                    }
-                },
+                Ok(p) => p,
                 Err(e) => {
                     #ptr_err_handling
                 }
@@ -341,7 +335,7 @@ where
         // trait binding returns func_param name.
         let val_name = names.func_param(&result.name);
         let post = quote! {
-            *#ptr_name = #val_name;
+            #ptr_name.write_ptr_to_guest(&#val_name);
         };
         (pre, post)
     };
@@ -363,7 +357,7 @@ where
             witx::BuiltinType::String => unimplemented!("string types"),
         },
         witx::Type::Enum(_) | witx::Type::Flags(_) | witx::Type::Int(_) => write_val_to_ptr,
-        witx::Type::Struct(s) if struct_is_copy(&s) => write_val_to_ptr,
+        witx::Type::Struct(_) => write_val_to_ptr,
         _ => unimplemented!("missing marshalling result for {:?}", &*tref.type_()),
     }
 }
