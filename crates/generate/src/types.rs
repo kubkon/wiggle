@@ -412,9 +412,20 @@ fn define_handle(names: &Names, name: &witx::Id, h: &witx::HandleDatatype) -> To
             }
         }
 
+        impl From<#ident> for i32 {
+            fn from(e: #ident) -> i32 {
+                e.0 as i32
+            }
+        }
+
         impl From<u32> for #ident {
             fn from(e: u32) -> #ident {
                 #ident(e)
+            }
+        }
+        impl From<i32> for #ident {
+            fn from(e: i32) -> #ident {
+                #ident(e as u32)
             }
         }
 
