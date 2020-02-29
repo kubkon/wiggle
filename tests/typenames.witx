@@ -200,7 +200,7 @@
     ;;; The right to invoke `fd_datasync`.
     ;;
     ;;; If `path_open` is set, includes the right to invoke
-    ;;; `path_open` with `fdflag::dsync`.
+    ;;; `path_open` with `fdflags::dsync`.
     $fd_datasync
     ;;; The right to invoke `fd_read` and `sock_recv`.
     ;;
@@ -213,10 +213,10 @@
     ;;; The right to invoke `fd_sync`.
     ;;
     ;;; If `path_open` is set, includes the right to invoke
-    ;;; `path_open` with `fdflag::rsync` and `fdflag::dsync`.
+    ;;; `path_open` with `fdflags::rsync` and `fdflags::dsync`.
     $fd_sync
     ;;; The right to invoke `fd_seek` in such a way that the file offset
-    ;;; remains unaltered (i.e., `WHENCE_CUR` with offset zero), or to
+    ;;; remains unaltered (i.e., `whence::cur` with offset zero), or to
     ;;; invoke `fd_tell`.
     $fd_tell
     ;;; The right to invoke `fd_write` and `sock_send`.
@@ -273,8 +273,8 @@
   )
 )
 
-;;; A file descriptor index.
-(typename $fd u32)
+;;; A file descriptor handle.
+(typename $fd (handle))
 
 ;;; A region of memory for scatter/gather reads.
 (typename $iovec
@@ -419,13 +419,13 @@
 ;;; Which file time attributes to adjust.
 (typename $fstflags
   (flags u16
-    ;;; Adjust the last data access timestamp to the value stored in `filestat::st_atim`.
+    ;;; Adjust the last data access timestamp to the value stored in `filestat::atim`.
     $atim
-    ;;; Adjust the last data access timestamp to the time of clock `clock::realtime`.
+    ;;; Adjust the last data access timestamp to the time of clock `clockid::realtime`.
     $atim_now
-    ;;; Adjust the last data modification timestamp to the value stored in `filestat::st_mtim`.
+    ;;; Adjust the last data modification timestamp to the value stored in `filestat::mtim`.
     $mtim
-    ;;; Adjust the last data modification timestamp to the time of clock `clock::realtime`.
+    ;;; Adjust the last data modification timestamp to the time of clock `clockid::realtime`.
     $mtim_now
   )
 )
@@ -484,13 +484,13 @@
 ;;; Type of a subscription to an event or its occurrence.
 (typename $eventtype
   (enum u8
-    ;;; The time value of clock `subscription::u.clock.clock_id` has
-    ;;; reached timestamp `subscription::u.clock.timeout`.
+    ;;; The time value of clock `subscription_clock::id` has
+    ;;; reached timestamp `subscription_clock::timeout`.
     $clock
-    ;;; File descriptor `subscription::u.fd_readwrite.fd` has data
+    ;;; File descriptor `subscription_fd_readwrite::file_descriptor` has data
     ;;; available for reading. This event always triggers for regular files.
     $fd_read
-    ;;; File descriptor `subscription::u.fd_readwrite.fd` has capacity
+    ;;; File descriptor `subscription_fd_readwrite::file_descriptor` has capacity
     ;;; available for writing. This event always triggers for regular files.
     $fd_write
   )
@@ -516,42 +516,35 @@
   )
 )
 
-;;; The contents of an $event.
-;; (typename $event_u
-;;   (union
-;;     ;;; When type is `eventtype::fd_read` or `eventtype::fd_write`:
-;;     (field $fd_readwrite $event_fd_readwrite)
-;;   )
-;; )
-
 ;;; An event that occurred.
-;;(typename $event
-;;  (struct
-;;    ;;; User-provided value that got attached to `subscription::userdata`.
-;;    (field $userdata $userdata)
-;;    ;;; If non-zero, an error that occurred while processing the subscription request.
-;;    (field $error $errno)
-;;    ;;; The type of the event that occurred.
-;;    (field $type $eventtype)
-;;    ;;; The contents of the event.
-;;    (field $u $event_u)
-;;  )
-;;)
+(typename $event
+  (struct
+    ;;; User-provided value that got attached to `subscription::userdata`.
+    (field $userdata $userdata)
+    ;;; If non-zero, an error that occurred while processing the subscription request.
+    (field $error $errno)
+    ;;; The type of event that occured
+    (field $type $eventtype)
+    ;;; The contents of the event, if it is an `eventtype::fd_read` or
+    ;;; `eventtype::fd_write`. `eventtype::clock` events ignore this field.
+    (field $fd_readwrite $event_fd_readwrite)
+  )
+)
 
 ;;; Flags determining how to interpret the timestamp provided in
-;;; `subscription::u.clock.timeout.`
+;;; `subscription_clock::timeout`.
 (typename $subclockflags
   (flags u16
     ;;; If set, treat the timestamp provided in
-    ;;; `subscription::u.clock.timeout` as an absolute timestamp of clock
-    ;;; `subscription::u.clock.clock_id.` If clear, treat the timestamp
-    ;;; provided in `subscription::u.clock.timeout` relative to the
-    ;;; current time value of clock `subscription::u.clock.clock_id.`
+    ;;; `subscription_clock::timeout` as an absolute timestamp of clock
+    ;;; `subscription_clock::id`. If clear, treat the timestamp
+    ;;; provided in `subscription_clock::timeout` relative to the
+    ;;; current time value of clock `subscription_clock::id`.
     $subscription_clock_abstime
   )
 )
 
-;;; The contents of a $subscription when type is `eventtype::clock`.
+;;; The contents of a `subscription` when type is `eventtype::clock`.
 (typename $subscription_clock
   (struct
     ;;; The clock against which to compare the timestamp.
@@ -566,7 +559,7 @@
   )
 )
 
-;;; The contents of a $subscription when type is type is
+;;; The contents of a `subscription` when type is type is
 ;;; `eventtype::fd_read` or `eventtype::fd_write`.
 (typename $subscription_fd_readwrite
   (struct
@@ -575,28 +568,25 @@
   )
 )
 
-;;; The contents of a $subscription.
-;; (typename $subscription_u
-;;   (union
-;;     ;;; When type is `eventtype::clock`:
-;;     (field $clock $subscription_clock)
-;;     ;;; When type is `eventtype::fd_read` or `eventtype::fd_write`:
-;;     (field $fd_readwrite $subscription_fd_readwrite)
-;;   )
-;; )
+;;; The contents of a `subscription`.
+(typename $subscription_u
+  (union $eventtype
+    (field $clock $subscription_clock)
+    (field $fd_read  $subscription_fd_readwrite)
+    (field $fd_write $subscription_fd_readwrite)
+  )
+)
 
 ;;; Subscription to an event.
-;; (typename $subscription
-;;   (struct
-;;     ;;; User-provided value that is attached to the subscription in the
-;;     ;;; implementation and returned through `event::userdata`.
-;;     (field $userdata $userdata)
-;;     ;;; The type of the event to which to subscribe.
-;;     (field $type $eventtype)
-;;     ;;; The contents of the subscription.
-;;     (field $u $subscription_u)
-;;   )
-;; )
+(typename $subscription
+  (struct
+    ;;; User-provided value that is attached to the subscription in the
+    ;;; implementation and returned through `event::userdata`.
+    (field $userdata $userdata)
+    ;;; The type of the event to which to subscribe, and its contents
+    (field $u $subscription_u)
+  )
+)
 
 ;;; Exit code generated by a process when exiting.
 (typename $exitcode u32)
@@ -748,20 +738,9 @@
   )
 )
 
-;;; The contents of an $prestat.
-;; (typename $prestat_u
-;;   (union
-;;     ;;; When type is `preopentype::dir`:
-;;     (field $dir $prestat_dir)
-;;   )
-;; )
-
 ;;; Information about a pre-opened capability.
-;; (typename $prestat
-;;   (struct
-;;     ;;; The type of the pre-opened capability.
-;;     (field $pr_type $preopentype)
-;;     ;;; The contents of the information.
-;;     (field $u $prestat_u)
-;;   )
-;; )
+(typename $prestat
+  (union $preopentype
+    (field $dir $prestat_dir)
+  )
+)
