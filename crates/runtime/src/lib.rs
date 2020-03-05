@@ -124,7 +124,7 @@ impl<'a, T: ?Sized + Pointee> GuestPtr<'a, T> {
     }
 }
 
-impl<'a, T> GuestPtr<'a, [T]> {
+impl<'a, T: GuestType<'a>> GuestPtr<'a, [T]> {
     pub fn offset_base(&self) -> u32 {
         self.pointer.0
     }
@@ -141,6 +141,19 @@ impl<'a, T> GuestPtr<'a, [T]> {
     {
         let base = GuestPtr::new(self.mem, self.offset_base());
         (0..self.len()).map(move |i| base.add(i))
+    }
+
+    pub fn as_raw(&self) -> Result<*mut [T], GuestError> {
+        let ptr = self
+            .mem
+            .validate_size_align(self.pointer.0, T::guest_align(), self.pointer.1)?
+            as *mut T;
+
+        // SAFETY: iff there are no overlapping borrows (via as_raw), this *mut str can be used as &mut str.
+        unsafe {
+            let s = slice::from_raw_parts_mut(ptr, self.pointer.1 as usize);
+            Ok(s as *mut [T])
+        }
     }
 }
 
@@ -162,7 +175,7 @@ impl<'a> GuestPtr<'a, str> {
             .mem
             .validate_size_align(self.pointer.0, 1, self.pointer.1)?;
 
-        // TODO: doc unsafety here
+        // SAFETY: iff there are no overlapping borrows (via as_raw), this *mut str can be used as &mut str.
         unsafe {
             let s = slice::from_raw_parts_mut(ptr, self.pointer.1 as usize);
             match str::from_utf8_mut(s) {
