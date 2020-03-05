@@ -22,6 +22,14 @@ pub trait GuestType<'a>: Sized {
     /// and host memory.
     fn guest_align() -> usize;
 
+    /// Checks that the memory at `ptr` is a valid representation of `Self`.
+    ///
+    /// Performs any safety checks necessary and fails if the bytes pointed
+    /// to are invalid (e.g. invalid enum or flag value).
+    ///
+    /// Return value points to Wasm memory and is not safe to use.
+    fn validate(ptr: &GuestPtr<'a, Self>) -> Result<*mut u8, GuestError>;
+
     /// Reads this value from the provided `ptr`.
     ///
     /// Must internally perform any safety checks necessary and is allowed to
@@ -47,7 +55,7 @@ macro_rules! primitives {
             fn guest_align() -> usize { mem::align_of::<Self>() }
 
             #[inline]
-            fn read(ptr: &GuestPtr<'a, Self>) -> Result<Self, GuestError> {
+            fn validate(ptr: &GuestPtr<'a, Self>) -> Result<*mut u8, GuestError> {
                 // Any bit pattern for any primitive implemented with this
                 // macro is safe, so our `validate_size_align` method will
                 // guarantee that if we are given a pointer it's valid for the
@@ -59,6 +67,11 @@ macro_rules! primitives {
                     Self::guest_align(),
                     Self::guest_size(),
                 )?;
+                Ok(host_ptr)
+            }
+            #[inline]
+            fn read(ptr: &GuestPtr<'a, Self>) -> Result<Self, GuestError> {
+                let host_ptr = Self::validate(ptr)?;
                 Ok(unsafe { *host_ptr.cast::<Self>() })
             }
 
@@ -100,7 +113,15 @@ impl<'a, T> GuestType<'a> for GuestPtr<'a, T> {
         u32::guest_align()
     }
 
+    fn validate(ptr: &GuestPtr<'a, Self>) -> Result<*mut u8, GuestError> {
+        let host_ptr =
+            ptr.mem()
+                .validate_size_align(ptr.offset(), Self::guest_align(), Self::guest_size())?;
+        Ok(host_ptr)
+    }
+
     fn read(ptr: &GuestPtr<'a, Self>) -> Result<Self, GuestError> {
+        let _ = Self::validate(ptr);
         let offset = ptr.cast::<u32>().read()?;
         Ok(GuestPtr::new(ptr.mem(), offset))
     }
