@@ -44,15 +44,15 @@ pub(super) fn define_flags(names: &Names, name: &witx::Id, f: &witx::FlagsDataty
 
             // Reading and validation are nearly the same thing for flags, so we define one private
             // helper method that we use for GuestValue::read and GuestValue::validate
-            fn validate_read(ptr: &wiggle_runtime::GuestPtr<#ident>) -> Result<(*mut u8, #ident), wiggle_runtime::GuestError> {
+            fn validate_read(ptr: &wiggle_runtime::GuestPtr<#ident>) -> Result<(*mut #ident, #ident), wiggle_runtime::GuestError> {
+                use std::convert::TryFrom;
+                use wiggle_runtime::GuestType;
                 let host_ptr =
                     ptr.mem()
                         .validate_size_align(ptr.offset(), Self::guest_align(), Self::guest_size())?;
-                use std::convert::TryFrom;
-                use wiggle_runtime::GuestType;
                 let reprval = #repr::read(&ptr.cast())?;
                 let value = #ident::try_from(reprval)?;
-                Ok((host_ptr, value))
+                Ok((host_ptr as *mut #ident, value))
             }
         }
 
@@ -147,11 +147,6 @@ pub(super) fn define_flags(names: &Names, name: &witx::Id, f: &witx::FlagsDataty
                 #repr::guest_align()
             }
 
-            fn validate(location: &wiggle_runtime::GuestPtr<'a, Self>) -> Result<*mut u8, wiggle_runtime::GuestError> {
-                let (validate, _) = Self::validate_read(location)?;
-                Ok(validate)
-            }
-
             fn read(location: &wiggle_runtime::GuestPtr<#ident>) -> Result<#ident, wiggle_runtime::GuestError> {
                 let (_, read) = Self::validate_read(location)?;
                 Ok(read)
@@ -162,5 +157,12 @@ pub(super) fn define_flags(names: &Names, name: &witx::Id, f: &witx::FlagsDataty
                 #repr::write(&location.cast(), val)
             }
         }
+        impl <'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
+            fn validate(location: &wiggle_runtime::GuestPtr<'a, Self>) -> Result<*mut #ident, wiggle_runtime::GuestError> {
+                let (validate, _) = Self::validate_read(location)?;
+                Ok(validate)
+            }
+        }
+
     }
 }

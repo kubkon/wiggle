@@ -13,6 +13,7 @@ pub(super) fn define_handle(
     let size = h.mem_size_align().size as u32;
     let align = h.mem_size_align().align as usize;
     quote! {
+        #[repr(transparent)]
         #[derive(Copy, Clone, Debug, ::std::hash::Hash, Eq, PartialEq)]
         pub struct #ident(u32);
 
@@ -54,21 +55,27 @@ pub(super) fn define_handle(
                 #align
             }
 
-            fn validate(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<*mut u8, wiggle_runtime::GuestError> {
-                let host_ptr =
-                    location.mem()
-                        .validate_size_align(location.offset(), Self::guest_align(), Self::guest_size())?;
-                Ok(host_ptr)
-            }
-
             fn read(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<#ident, wiggle_runtime::GuestError> {
-                let _ = Self::validate(location)?;
-                Ok(#ident(u32::read(&location.cast())?))
+                use wiggle_runtime::GuestTypeTransparent;
+                let ptr = Self::validate(location)?;
+                Ok(unsafe { ptr.read() })
             }
 
             fn write(location: &wiggle_runtime::GuestPtr<'_, Self>, val: Self) -> Result<(), wiggle_runtime::GuestError> {
                 u32::write(&location.cast(), val.0)
             }
         }
+
+        impl<'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
+            fn validate(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<*mut #ident, wiggle_runtime::GuestError> {
+                use wiggle_runtime::GuestType;
+                let host_ptr =
+                    location.mem()
+                        .validate_size_align(location.offset(), Self::guest_align(), Self::guest_size())?;
+                Ok(host_ptr as *mut #ident)
+            }
+        }
+
+
     }
 }

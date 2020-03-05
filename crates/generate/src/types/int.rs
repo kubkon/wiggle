@@ -71,21 +71,26 @@ pub(super) fn define_int(names: &Names, name: &witx::Id, i: &witx::IntDatatype) 
                 #repr::guest_align()
             }
 
-            fn validate(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<*mut u8, wiggle_runtime::GuestError> {
-                let host_ptr =
-                    location.mem()
-                        .validate_size_align(location.offset(), Self::guest_align(), Self::guest_size())?;
-                Ok(host_ptr)
-            }
-
             fn read(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<#ident, wiggle_runtime::GuestError> {
-                let _ = Self::validate(location)?;
-                Ok(#ident(#repr::read(&location.cast())?))
+                use wiggle_runtime::GuestTypeTransparent;
+                let ptr = Self::validate(location)?;
+                Ok(unsafe { ptr.read() })
             }
 
             fn write(location: &wiggle_runtime::GuestPtr<'_, #ident>, val: Self) -> Result<(), wiggle_runtime::GuestError> {
                 #repr::write(&location.cast(), val.0)
             }
         }
+
+        impl<'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
+            fn validate(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<*mut #ident, wiggle_runtime::GuestError> {
+                use wiggle_runtime::GuestType;
+                let host_ptr =
+                    location.mem()
+                        .validate_size_align(location.offset(), Self::guest_align(), Self::guest_size())?;
+               Ok(host_ptr)
+            }
+        }
+
     }
 }
