@@ -93,6 +93,9 @@ pub(super) fn define_struct(
             }
 
             fn read(location: &wiggle_runtime::GuestPtr<'a, Self>) -> Result<Self, wiggle_runtime::GuestError> {
+                let _ =
+                    location.mem()
+                        .validate_size_align(location.offset(), Self::guest_align(), Self::guest_size())?;
                 #(#member_reads)*
                 Ok(#ident { #(#member_names),* })
             }

@@ -13,7 +13,7 @@ mod region;
 
 pub use borrow::GuestBorrows;
 pub use error::GuestError;
-pub use guest_type::{GuestErrorType, GuestType};
+pub use guest_type::{GuestErrorType, GuestType, GuestTypeTransparent};
 pub use region::Region;
 
 /// A trait which abstracts how to get at the region of host memory taht
@@ -344,7 +344,7 @@ impl<'a, T: ?Sized + Pointee> GuestPtr<'a, T> {
     }
 }
 
-impl<'a, T: GuestType<'a>> GuestPtr<'a, [T]> {
+impl<'a, T> GuestPtr<'a, [T]> {
     /// For slices, specifically returns the relative pointer to the base of the
     /// array.
     ///
@@ -389,7 +389,10 @@ impl<'a, T: GuestType<'a>> GuestPtr<'a, [T]> {
     /// For safety against overlapping mutable borrows, the user must use the
     /// same `GuestBorrows` to create all *mut str or *mut [T] that are alive
     /// at the same time.
-    pub fn as_raw(&self, bc: &mut GuestBorrows) -> Result<*mut [T], GuestError> {
+    pub fn as_raw(&self, bc: &mut GuestBorrows) -> Result<*mut [T], GuestError>
+    where
+        T: GuestTypeTransparent<'a>,
+    {
         let len = match self.pointer.1.checked_mul(T::guest_size()) {
             Some(l) => l,
             None => return Err(GuestError::PtrOverflow),

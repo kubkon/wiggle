@@ -22,14 +22,6 @@ pub trait GuestType<'a>: Sized {
     /// and host memory.
     fn guest_align() -> usize;
 
-    /// Checks that the memory at `ptr` is a valid representation of `Self`.
-    ///
-    /// Performs any safety checks necessary and fails if the bytes pointed
-    /// to are invalid (e.g. invalid enum or flag value).
-    ///
-    /// Return value points to Wasm memory and is not safe to use.
-    fn validate(ptr: &GuestPtr<'a, Self>) -> Result<*mut u8, GuestError>;
-
     /// Reads this value from the provided `ptr`.
     ///
     /// Must internally perform any safety checks necessary and is allowed to
@@ -48,6 +40,19 @@ pub trait GuestType<'a>: Sized {
     fn write(ptr: &GuestPtr<'_, Self>, val: Self) -> Result<(), GuestError>;
 }
 
+/// A trait for `GuestType`s that have the same representation in guest memory
+/// as in Rust. These types can be used with the `GuestPtr::as_raw` method to
+/// view as a slice.
+pub trait GuestTypeTransparent<'a>: GuestType<'a> {
+    /// Checks that the memory at `ptr` is a valid representation of `Self`.
+    ///
+    /// Performs any safety checks necessary and fails if the bytes pointed
+    /// to are invalid (e.g. invalid enum or flag value).
+    ///
+    /// Return value points to Wasm memory and is not safe to use.
+    fn validate(ptr: &GuestPtr<'a, Self>) -> Result<*mut Self, GuestError>;
+}
+
 macro_rules! primitives {
     ($($i:ident)*) => ($(
         impl<'a> GuestType<'a> for $i {
@@ -55,22 +60,8 @@ macro_rules! primitives {
             fn guest_align() -> usize { mem::align_of::<Self>() }
 
             #[inline]
-            fn validate(ptr: &GuestPtr<'a, Self>) -> Result<*mut u8, GuestError> {
-                // Any bit pattern for any primitive implemented with this
-                // macro is safe, so our `validate_size_align` method will
-                // guarantee that if we are given a pointer it's valid for the
-                // size of our type as well as properly aligned. Consequently we
-                // should be able to safely ready the pointer just after we
-                // validated it, returning it along here.
-                let host_ptr = ptr.mem().validate_size_align(
-                    ptr.offset(),
-                    Self::guest_align(),
-                    Self::guest_size(),
-                )?;
-                Ok(host_ptr)
-            }
-            #[inline]
             fn read(ptr: &GuestPtr<'a, Self>) -> Result<Self, GuestError> {
+                use GuestTypeTransparent;
                 let host_ptr = Self::validate(ptr)?;
                 Ok(unsafe { *host_ptr.cast::<Self>() })
             }
@@ -91,6 +82,25 @@ macro_rules! primitives {
                 Ok(())
             }
         }
+
+        impl<'a> GuestTypeTransparent<'a> for $i {
+            #[inline]
+            fn validate(ptr: &GuestPtr<'a, Self>) -> Result<*mut Self, GuestError> {
+                // Any bit pattern for any primitive implemented with this
+                // macro is safe, so our `validate_size_align` method will
+                // guarantee that if we are given a pointer it's valid for the
+                // size of our type as well as properly aligned. Consequently we
+                // should be able to safely ready the pointer just after we
+                // validated it, returning it along here.
+                let host_ptr = ptr.mem().validate_size_align(
+                    ptr.offset(),
+                    Self::guest_align(),
+                    Self::guest_size(),
+                )?;
+                Ok(host_ptr as *mut $i)
+            }
+        }
+
     )*)
 }
 
@@ -113,15 +123,10 @@ impl<'a, T> GuestType<'a> for GuestPtr<'a, T> {
         u32::guest_align()
     }
 
-    fn validate(ptr: &GuestPtr<'a, Self>) -> Result<*mut u8, GuestError> {
-        let host_ptr =
+    fn read(ptr: &GuestPtr<'a, Self>) -> Result<Self, GuestError> {
+        let _ =
             ptr.mem()
                 .validate_size_align(ptr.offset(), Self::guest_align(), Self::guest_size())?;
-        Ok(host_ptr)
-    }
-
-    fn read(ptr: &GuestPtr<'a, Self>) -> Result<Self, GuestError> {
-        let _ = Self::validate(ptr);
         let offset = ptr.cast::<u32>().read()?;
         Ok(GuestPtr::new(ptr.mem(), offset))
     }
