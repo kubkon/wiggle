@@ -29,12 +29,12 @@ pub unsafe trait GuestMemory {
         // Figure out our pointer to the start of memory
         let start = match (base_ptr as usize).checked_add(offset as usize) {
             Some(ptr) => ptr,
-            None => return Err(GuestError::PtrOutOfBounds(region)),
+            None => return Err(GuestError::PtrOverflow),
         };
         // and use that to figure out the end pointer
         let end = match start.checked_add(len as usize) {
             Some(ptr) => ptr,
-            None => return Err(GuestError::PtrOutOfBounds(region)),
+            None => return Err(GuestError::PtrOverflow),
         };
         // and then verify that our end doesn't reach past the end of our memory
         if end > (base_ptr as usize) + (base_len as usize) {
@@ -121,7 +121,7 @@ impl<'a, T: ?Sized + Pointee> GuestPtr<'a, T> {
             .and_then(|o| self.pointer.checked_add(o));
         let offset = match offset {
             Some(o) => o,
-            None => return Err(GuestError::InvalidFlagValue("")),
+            None => return Err(GuestError::PtrOverflow),
         };
         Ok(GuestPtr::new(self.mem, offset))
     }
@@ -151,10 +151,13 @@ impl<'a, T: GuestType<'a>> GuestPtr<'a, [T]> {
     /// The resulting `*mut [T]` can be used as a `&mut [T]` as long as the
     /// reference is dropped before any Wasm code is re-entered.
     pub fn as_raw(&self, bc: &mut GuestBorrows) -> Result<*mut [T], GuestError> {
-        let ptr = self
-            .mem
-            .validate_size_align(self.pointer.0, T::guest_align(), self.pointer.1)?
-            as *mut T;
+        let len = match self.pointer.1.checked_mul(T::guest_size()) {
+            Some(l) => l,
+            None => return Err(GuestError::PtrOverflow),
+        };
+        let ptr =
+            self.mem
+                .validate_size_align(self.pointer.0, T::guest_align(), len)? as *mut T;
 
         bc.borrow(Region {
             start: self.pointer.0,
