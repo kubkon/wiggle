@@ -54,7 +54,15 @@ pub(super) fn define_handle(
                 #align
             }
 
+            fn validate(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<*mut u8, wiggle_runtime::GuestError> {
+                let host_ptr =
+                    location.mem()
+                        .validate_size_align(location.offset(), Self::guest_align(), Self::guest_size())?;
+                Ok(host_ptr)
+            }
+
             fn read(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<#ident, wiggle_runtime::GuestError> {
+                let _ = Self::validate(location)?;
                 Ok(#ident(u32::read(&location.cast())?))
             }
 

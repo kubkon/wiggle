@@ -41,6 +41,19 @@ pub(super) fn define_flags(names: &Names, name: &witx::Id, f: &witx::FlagsDataty
             pub fn contains(&self, other: &#ident) -> bool {
                 !*self & *other == Self::EMPTY_FLAGS
             }
+
+            // Reading and validation are nearly the same thing for flags, so we define one private
+            // helper method that we use for GuestValue::read and GuestValue::validate
+            fn validate_read(ptr: &wiggle_runtime::GuestPtr<#ident>) -> Result<(*mut u8, #ident), wiggle_runtime::GuestError> {
+                let host_ptr =
+                    ptr.mem()
+                        .validate_size_align(ptr.offset(), Self::guest_align(), Self::guest_size())?;
+                use std::convert::TryFrom;
+                use wiggle_runtime::GuestType;
+                let reprval = #repr::read(&ptr.cast())?;
+                let value = #ident::try_from(reprval)?;
+                Ok((host_ptr, value))
+            }
         }
 
         impl ::std::fmt::Display for #ident {
@@ -134,10 +147,14 @@ pub(super) fn define_flags(names: &Names, name: &witx::Id, f: &witx::FlagsDataty
                 #repr::guest_align()
             }
 
-            fn read(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<#ident, wiggle_runtime::GuestError> {
-                use std::convert::TryFrom;
-                let bits = #repr::read(&location.cast())?;
-                #ident::try_from(bits)
+            fn validate(location: &wiggle_runtime::GuestPtr<'a, Self>) -> Result<*mut u8, wiggle_runtime::GuestError> {
+                let (validate, _) = Self::validate_read(location)?;
+                Ok(validate)
+            }
+
+            fn read(location: &wiggle_runtime::GuestPtr<#ident>) -> Result<#ident, wiggle_runtime::GuestError> {
+                let (_, read) = Self::validate_read(location)?;
+                Ok(read)
             }
 
             fn write(location: &wiggle_runtime::GuestPtr<'_, #ident>, val: Self) -> Result<(), wiggle_runtime::GuestError> {
