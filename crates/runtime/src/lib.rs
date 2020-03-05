@@ -4,9 +4,12 @@ use std::marker;
 use std::slice;
 use std::str;
 
+mod borrow;
 mod error;
 mod guest_type;
 mod region;
+
+pub use borrow::GuestBorrows;
 pub use error::GuestError;
 pub use guest_type::{GuestErrorType, GuestType};
 pub use region::Region;
