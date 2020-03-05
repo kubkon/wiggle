@@ -146,13 +146,23 @@ impl<'a, T: GuestType<'a>> GuestPtr<'a, [T]> {
         (0..self.len()).map(move |i| base.add(i))
     }
 
-    pub fn as_raw(&self) -> Result<*mut [T], GuestError> {
+    /// Safety note: The user must use the same `GuestBorrows` to check each
+    /// use of GuestType::as_raw that is alive simultaneously.
+    /// The resulting `*mut [T]` can be used as a `&mut [T]` as long as the
+    /// reference is dropped before any Wasm code is re-entered.
+    pub fn as_raw(&self, bc: &mut GuestBorrows) -> Result<*mut [T], GuestError> {
         let ptr = self
             .mem
             .validate_size_align(self.pointer.0, T::guest_align(), self.pointer.1)?
             as *mut T;
 
-        // SAFETY: iff there are no overlapping borrows (via as_raw), this *mut str can be used as &mut str.
+        bc.borrow(Region {
+            start: self.pointer.0,
+            len: self.pointer.1 * T::guest_size(),
+        })?;
+
+        // SAFETY: iff there are no overlapping borrows (all uses of as_raw use this same
+        // GuestBorrows), its valid to construct a *mut [T]
         unsafe {
             let s = slice::from_raw_parts_mut(ptr, self.pointer.1 as usize);
             Ok(s as *mut [T])
@@ -173,12 +183,22 @@ impl<'a> GuestPtr<'a, str> {
         GuestPtr::new(self.mem, self.pointer)
     }
 
-    pub fn as_raw(&self) -> Result<*mut str, GuestError> {
+    /// Safety note: The user must use the same `GuestBorrows` to check each
+    /// use of GuestType::as_raw that is alive simultaneously.
+    /// The resulting `*mut str` can be used as a `&mut str` as long as the
+    /// reference is dropped before any Wasm code is re-entered.
+    pub fn as_raw(&self, bc: &mut GuestBorrows) -> Result<*mut str, GuestError> {
         let ptr = self
             .mem
             .validate_size_align(self.pointer.0, 1, self.pointer.1)?;
 
-        // SAFETY: iff there are no overlapping borrows (via as_raw), this *mut str can be used as &mut str.
+        bc.borrow(Region {
+            start: self.pointer.0,
+            len: self.pointer.1,
+        })?;
+
+        // SAFETY: iff there are no overlapping borrows (all uses of as_raw use this same
+        // GuestBorrows), its valid to construct a *mut str
         unsafe {
             let s = slice::from_raw_parts_mut(ptr, self.pointer.1 as usize);
             match str::from_utf8_mut(s) {
