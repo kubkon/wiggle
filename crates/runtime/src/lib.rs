@@ -403,7 +403,7 @@ impl<'a, T> GuestPtr<'a, [T]> {
 
         bc.borrow(Region {
             start: self.pointer.0,
-            len: self.pointer.1 * T::guest_size(),
+            len,
         })?;
 
         // SAFETY: iff there are no overlapping borrows (all uses of as_raw use this same
