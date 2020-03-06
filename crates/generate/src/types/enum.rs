@@ -36,21 +36,6 @@ pub(super) fn define_enum(names: &Names, name: &witx::Id, e: &witx::EnumDatatype
             #(#variant_names),*
         }
 
-        impl #ident {
-            // Reading and validation are nearly the same thing for enums, so we define one private
-            // helper method that we use for GuestValue::read and GuestValue::validate
-            fn validate_read(ptr: &wiggle_runtime::GuestPtr<#ident>) -> Result<(*mut #ident, #ident), wiggle_runtime::GuestError> {
-                use std::convert::TryFrom;
-                use wiggle_runtime::GuestType;
-                let host_ptr =
-                    ptr.mem()
-                        .validate_size_align(ptr.offset(), Self::guest_align(), Self::guest_size())?;
-                let reprval = #repr::read(&ptr.cast())?;
-                let value = #ident::try_from(reprval)?;
-                Ok((host_ptr as *mut #ident, value))
-            }
-        }
-
         impl ::std::fmt::Display for #ident {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 let to_str = match self {
@@ -101,8 +86,10 @@ pub(super) fn define_enum(names: &Names, name: &witx::Id, e: &witx::EnumDatatype
             }
 
             fn read(location: &wiggle_runtime::GuestPtr<#ident>) -> Result<#ident, wiggle_runtime::GuestError> {
-                let (_, read) = Self::validate_read(location)?;
-                Ok(read)
+                use std::convert::TryFrom;
+                let reprval = #repr::read(&location.cast())?;
+                let value = #ident::try_from(reprval)?;
+                Ok(value)
             }
 
             fn write(location: &wiggle_runtime::GuestPtr<'_, #ident>, val: Self)
@@ -113,9 +100,12 @@ pub(super) fn define_enum(names: &Names, name: &witx::Id, e: &witx::EnumDatatype
         }
 
         unsafe impl <'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
-            fn validate(location: &wiggle_runtime::GuestPtr<'a, Self>) -> Result<*mut #ident, wiggle_runtime::GuestError> {
-                let (validate, _) = Self::validate_read(location)?;
-                Ok(validate)
+            fn validate(location: *mut #ident) -> Result<(), wiggle_runtime::GuestError> {
+                use std::convert::TryFrom;
+                // Validate value in memory using #ident::try_from(reprval)
+                let reprval = unsafe { (location as *mut #repr).read() };
+                let _val = #ident::try_from(reprval)?;
+                Ok(())
             }
         }
     }

@@ -56,9 +56,10 @@ pub(super) fn define_handle(
             }
 
             fn read(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<#ident, wiggle_runtime::GuestError> {
-                use wiggle_runtime::GuestTypeTransparent;
-                let ptr = Self::validate(location)?;
-                Ok(unsafe { ptr.read() })
+                let host_ptr =
+                    location.mem()
+                        .validate_size_align(location.offset(), Self::guest_align(), Self::guest_size())?;
+                Ok(unsafe { (host_ptr as *mut #ident).read() })
             }
 
             fn write(location: &wiggle_runtime::GuestPtr<'_, Self>, val: Self) -> Result<(), wiggle_runtime::GuestError> {
@@ -67,12 +68,9 @@ pub(super) fn define_handle(
         }
 
         unsafe impl<'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
-            fn validate(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<*mut #ident, wiggle_runtime::GuestError> {
-                use wiggle_runtime::GuestType;
-                let host_ptr =
-                    location.mem()
-                        .validate_size_align(location.offset(), Self::guest_align(), Self::guest_size())?;
-                Ok(host_ptr as *mut #ident)
+            fn validate(_location: *mut #ident) -> Result<(), wiggle_runtime::GuestError> {
+                // All bit patterns accepted
+                Ok(())
             }
         }
 

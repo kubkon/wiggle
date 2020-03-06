@@ -406,6 +406,12 @@ impl<'a, T> GuestPtr<'a, [T]> {
             len,
         })?;
 
+        // Validate all elements in slice.
+        // SAFETY: ptr has been validated by self.mem.validate_size_align
+        for offs in 0..self.pointer.1 {
+            T::validate(unsafe { ptr.add(offs as usize) })?;
+        }
+
         // SAFETY: iff there are no overlapping borrows (all uses of as_raw use this same
         // GuestBorrows), its valid to construct a *mut [T]
         unsafe {

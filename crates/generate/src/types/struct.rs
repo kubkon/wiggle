@@ -79,20 +79,22 @@ pub(super) fn define_struct(
 
     let transparent = if s.is_transparent() {
         let member_validate = s.member_layout().into_iter().map(|ml| {
-            let offset = ml.offset as u32;
+            let offset = ml.offset;
             let typename = names.type_ref(&ml.member.tref, anon_lifetime());
-            quote!(#typename::validate(&location.cast::<u8>().add(#offset)?.cast())?;)
+            quote! {
+                // SAFETY: caller has validated bounds and alignment of `location`.
+                // member_layout gives correctly-aligned pointers inside that area.
+                #typename::validate(
+                    unsafe { (location as *mut u8).add(#offset) as *mut _ }
+                )?;
+            }
         });
 
         quote! {
             unsafe impl<'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
-                fn validate(location: &wiggle_runtime::GuestPtr<'a, Self>) -> Result<*mut #ident, wiggle_runtime::GuestError> {
-                    use wiggle_runtime::GuestType;
-                    let ptr =
-                        location.mem()
-                            .validate_size_align(location.offset(), Self::guest_align(), Self::guest_size())?;
+                fn validate(location: *mut #ident) -> Result<(), wiggle_runtime::GuestError> {
                     #(#member_validate)*
-                    Ok(ptr as *mut #ident)
+                    Ok(())
                 }
             }
         }
