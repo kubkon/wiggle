@@ -1,5 +1,5 @@
 use proptest::prelude::*;
-use wiggle_runtime::{GuestError, GuestMemory, GuestPtr};
+use wiggle_runtime::{GuestBorrows, GuestError, GuestMemory, GuestPtr};
 use wiggle_test::{impl_errno, HostMemory, MemArea, WasiCtx};
 
 wiggle::from_witx!({
@@ -11,7 +11,8 @@ impl_errno!(types::Errno);
 
 impl strings::Strings for WasiCtx {
     fn hello_string(&self, a_string: &GuestPtr<str>) -> Result<u32, types::Errno> {
-        let s = a_string.as_raw().expect("should be valid string");
+        let mut bc = GuestBorrows::new();
+        let s = a_string.as_raw(&mut bc).expect("should be valid string");
         unsafe {
             println!("a_string='{}'", &*s);
             Ok((*s).len() as u32)

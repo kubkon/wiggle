@@ -77,6 +77,29 @@ pub(super) fn define_struct(
         (quote!(), quote!(, Copy, PartialEq))
     };
 
+    let transparent = if s.is_transparent() {
+        let member_validate = s.member_layout().into_iter().map(|ml| {
+            let offset = ml.offset as u32;
+            let typename = names.type_ref(&ml.member.tref, anon_lifetime());
+            quote!(#typename::validate(&location.cast::<u8>().add(#offset)?.cast())?;)
+        });
+
+        quote! {
+            impl<'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
+                fn validate(location: &wiggle_runtime::GuestPtr<'a, Self>) -> Result<*mut #ident, wiggle_runtime::GuestError> {
+                    use wiggle_runtime::GuestType;
+                    let ptr =
+                        location.mem()
+                            .validate_size_align(location.offset(), Self::guest_align(), Self::guest_size())?;
+                    #(#member_validate)*
+                    Ok(ptr as *mut #ident)
+                }
+            }
+        }
+    } else {
+        quote!()
+    };
+
     quote! {
         #[derive(Clone, Debug #extra_derive)]
         pub struct #ident #struct_lifetime {
@@ -105,5 +128,7 @@ pub(super) fn define_struct(
                 Ok(())
             }
         }
+
+        #transparent
     }
 }

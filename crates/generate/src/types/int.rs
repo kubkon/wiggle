@@ -88,7 +88,7 @@ pub(super) fn define_int(names: &Names, name: &witx::Id, i: &witx::IntDatatype) 
                 let host_ptr =
                     location.mem()
                         .validate_size_align(location.offset(), Self::guest_align(), Self::guest_size())?;
-               Ok(host_ptr)
+               Ok(host_ptr as *mut #ident)
             }
         }
 
