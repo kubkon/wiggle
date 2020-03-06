@@ -56,10 +56,7 @@ pub(super) fn define_handle(
             }
 
             fn read(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<#ident, wiggle_runtime::GuestError> {
-                let host_ptr =
-                    location.mem()
-                        .validate_size_align(location.offset(), Self::guest_align(), Self::guest_size())?;
-                Ok(unsafe { (host_ptr as *mut #ident).read() })
+                Ok(#ident(u32::read(&location.cast())?))
             }
 
             fn write(location: &wiggle_runtime::GuestPtr<'_, Self>, val: Self) -> Result<(), wiggle_runtime::GuestError> {

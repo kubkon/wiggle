@@ -72,10 +72,8 @@ pub(super) fn define_int(names: &Names, name: &witx::Id, i: &witx::IntDatatype) 
             }
 
             fn read(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<#ident, wiggle_runtime::GuestError> {
-                let host_ptr =
-                    location.mem()
-                        .validate_size_align(location.offset(), Self::guest_align(), Self::guest_size())?;
-                Ok(unsafe { (host_ptr as *mut #ident).read() })
+                Ok(#ident(#repr::read(&location.cast())?))
+
             }
 
             fn write(location: &wiggle_runtime::GuestPtr<'_, #ident>, val: Self) -> Result<(), wiggle_runtime::GuestError> {
