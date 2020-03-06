@@ -5,6 +5,10 @@ use wiggle_runtime::GuestMemory;
 
 pub type MemSet = BTreeSet<MemArea>;
 
+pub fn memset(ms: &[MemArea]) -> MemSet {
+    ms.into_iter().cloned().collect()
+}
+
 #[repr(align(4096))]
 pub struct HostMemory {
     buffer: UnsafeCell<[u8; 4096]>,
@@ -59,7 +63,11 @@ impl HostMemory {
             .iter()
             .flat_map(|a| a.inside(size))
             .collect();
-        prop::sample::select(available).boxed()
+
+        Just(available)
+            .prop_filter("available memory for allocation", |a| !a.is_empty())
+            .prop_flat_map(|a| prop::sample::select(a))
+            .boxed()
     }
 }
 
@@ -111,7 +119,7 @@ impl MemArea {
     pub fn non_overlapping_set(areas: &MemSet) -> bool {
         // A is all areas
         for a in areas.iter() {
-            let set_of_a: MemSet = vec![a].into_iter().cloned().collect();
+            let set_of_a: MemSet = memset(&[*a]);
             // (A, B) is every pair of areas
             for b in areas.difference(&set_of_a) {
                 if a.overlapping(*b) {
@@ -124,7 +132,7 @@ impl MemArea {
 
     /// Enumerate all memareas of size `len` inside a given area
     fn inside(&self, len: u32) -> impl Iterator<Item = MemArea> {
-        let end: i64 = len as i64 - self.len as i64;
+        let end: i64 = self.len as i64 - len as i64;
         let start = self.ptr;
         (0..end).into_iter().map(move |v| MemArea {
             ptr: start + v as u32,
@@ -183,6 +191,31 @@ mod test {
         );
     }
 
+    fn set_of_slices_strat(
+        s1: u32,
+        s2: u32,
+        s3: u32,
+    ) -> BoxedStrategy<(MemArea, MemArea, MemArea)> {
+        HostMemory::byte_slice_strat(s1, &MemSet::new())
+            .prop_flat_map(move |a1| (Just(a1), HostMemory::byte_slice_strat(s2, &memset(&[a1]))))
+            .prop_flat_map(move |(a1, a2)| {
+                (
+                    Just(a1),
+                    Just(a2),
+                    HostMemory::byte_slice_strat(s3, &memset(&[a1, a2])),
+                )
+            })
+            .boxed()
+    }
+
+    #[test]
+    fn trivial_inside() {
+        let a = MemArea { ptr: 24, len: 4072 };
+        let interior = a.inside(24).collect::<Vec<_>>();
+
+        assert!(interior.len() > 0);
+    }
+
     proptest! {
         #[test]
         // For some random region of decent size
@@ -196,13 +229,19 @@ mod test {
                 // i overlaps with r:
                 assert!(r.overlapping(i));
                 // i is inside r:
-                assert!(r.ptr >= i.ptr);
+                assert!(i.ptr >= r.ptr);
                 assert!(r.ptr + r.len >= i.ptr + i.len);
                 // the set of exterior and i is non-overlapping
                 let mut all = exterior.clone();
                 all.insert(i);
                 assert!(MemArea::non_overlapping_set(&all));
             }
+        }
+
+        #[test]
+        fn byte_slices((s1, s2, s3) in set_of_slices_strat(12, 34, 56)) {
+            let all = memset(&[s1, s2, s3]);
+            assert!(MemArea::non_overlapping_set(&all));
         }
     }
 }
