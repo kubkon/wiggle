@@ -92,6 +92,7 @@ pub(super) fn define_struct(
 
         quote! {
             unsafe impl<'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
+                #[inline]
                 fn validate(location: *mut #ident) -> Result<(), wiggle_runtime::GuestError> {
                     #(#member_validate)*
                     Ok(())

@@ -100,6 +100,7 @@ pub(super) fn define_enum(names: &Names, name: &witx::Id, e: &witx::EnumDatatype
         }
 
         unsafe impl <'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
+            #[inline]
             fn validate(location: *mut #ident) -> Result<(), wiggle_runtime::GuestError> {
                 use std::convert::TryFrom;
                 // Validate value in memory using #ident::try_from(reprval)

@@ -147,6 +147,7 @@ pub(super) fn define_flags(names: &Names, name: &witx::Id, f: &witx::FlagsDataty
             }
         }
         unsafe impl <'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
+            #[inline]
             fn validate(location: *mut #ident) -> Result<(), wiggle_runtime::GuestError> {
                 use std::convert::TryFrom;
                 // Validate value in memory using #ident::try_from(reprval)
