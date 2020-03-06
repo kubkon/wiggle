@@ -72,9 +72,6 @@ impl HostMemory {
         let mut out = MemAreas::new();
         let mut start = 0;
         for r in regions.iter() {
-            if r.ptr < start {
-                panic!("out-of-order: {:?} {} context: {:?}", r.ptr, start, regions)
-            }
             let len = r.ptr - start;
             if len > 0 {
                 out.insert(MemArea {
