@@ -128,9 +128,6 @@ impl<'a, T> GuestType<'a> for GuestPtr<'a, T> {
     }
 
     fn read(ptr: &GuestPtr<'a, Self>) -> Result<Self, GuestError> {
-        let _ =
-            ptr.mem()
-                .validate_size_align(ptr.offset(), Self::guest_align(), Self::guest_size())?;
         let offset = ptr.cast::<u32>().read()?;
         Ok(GuestPtr::new(ptr.mem(), offset))
     }
