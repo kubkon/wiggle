@@ -47,7 +47,7 @@ impl HelloStringExercise {
                 return_ptr_loc,
             })
             .prop_filter("non-overlapping pointers", |e| {
-                MemArea::non_overlapping_set(&[&e.string_ptr_loc, &e.return_ptr_loc])
+                MemArea::non_overlapping_set(&[e.string_ptr_loc, e.return_ptr_loc])
             })
             .boxed()
     }

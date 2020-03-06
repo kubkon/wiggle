@@ -3,10 +3,36 @@ use std::cell::UnsafeCell;
 use std::collections::BTreeSet;
 use wiggle_runtime::GuestMemory;
 
-pub type MemSet = BTreeSet<MemArea>;
+#[derive(Debug, Clone)]
+pub struct MemSet(BTreeSet<MemArea>);
+impl MemSet {
+    pub fn new() -> Self {
+        MemSet(BTreeSet::new())
+    }
+    pub fn insert(&mut self, a: MemArea) {
+        self.0.insert(a);
+    }
+    pub fn iter(&self) -> impl Iterator<Item = &MemArea> {
+        self.0.iter()
+    }
+    pub fn difference(&self, other: &MemSet) -> MemSet {
+        MemSet(self.0.difference(&other.0).cloned().collect())
+    }
+}
 
-pub fn memset(ms: &[MemArea]) -> MemSet {
-    ms.into_iter().cloned().collect()
+impl<R> From<R> for MemSet
+where
+    R: AsRef<[MemArea]>,
+{
+    fn from(ms: R) -> MemSet {
+        MemSet(ms.as_ref().into_iter().cloned().collect())
+    }
+}
+
+impl Into<Vec<MemArea>> for MemSet {
+    fn into(self) -> Vec<MemArea> {
+        self.0.into_iter().collect()
+    }
 }
 
 #[repr(align(4096))]
@@ -116,12 +142,16 @@ impl MemArea {
         }
         return false;
     }
-    pub fn non_overlapping_set(areas: &MemSet) -> bool {
+    pub fn non_overlapping_set<M>(areas: M) -> bool
+    where
+        M: Into<MemSet>,
+    {
+        let areas = areas.into();
         // A is all areas
         for a in areas.iter() {
-            let set_of_a: MemSet = memset(&[*a]);
+            let set_of_a: MemSet = MemSet::from(&[*a]);
             // (A, B) is every pair of areas
-            for b in areas.difference(&set_of_a) {
+            for b in areas.difference(&set_of_a).iter() {
                 if a.overlapping(*b) {
                     return false;
                 }
@@ -155,8 +185,8 @@ mod test {
     #[test]
     fn invert() {
         fn invert_equality(input: &[MemArea], expected: &[MemArea]) {
-            let input: BTreeSet<MemArea> = input.iter().cloned().collect();
-            let inverted: Vec<MemArea> = HostMemory::invert(&input).into_iter().collect();
+            let input: MemSet = input.into();
+            let inverted: Vec<MemArea> = HostMemory::invert(&input).into();
             assert_eq!(expected, inverted.as_slice());
         }
 
@@ -197,12 +227,17 @@ mod test {
         s3: u32,
     ) -> BoxedStrategy<(MemArea, MemArea, MemArea)> {
         HostMemory::byte_slice_strat(s1, &MemSet::new())
-            .prop_flat_map(move |a1| (Just(a1), HostMemory::byte_slice_strat(s2, &memset(&[a1]))))
+            .prop_flat_map(move |a1| {
+                (
+                    Just(a1),
+                    HostMemory::byte_slice_strat(s2, &MemSet::from(&[a1])),
+                )
+            })
             .prop_flat_map(move |(a1, a2)| {
                 (
                     Just(a1),
                     Just(a2),
-                    HostMemory::byte_slice_strat(s3, &memset(&[a1, a2])),
+                    HostMemory::byte_slice_strat(s3, &MemSet::from(&[a1, a2])),
                 )
             })
             .boxed()
@@ -220,7 +255,7 @@ mod test {
         #[test]
         // For some random region of decent size
         fn inside(r in HostMemory::mem_area_strat(123)) {
-            let set_of_r: MemSet = vec![r].into_iter().collect();
+            let set_of_r = MemSet::from(&[r]);
             // All regions outside of r:
             let exterior = HostMemory::invert(&set_of_r);
             // All regions inside of r:
@@ -234,14 +269,14 @@ mod test {
                 // the set of exterior and i is non-overlapping
                 let mut all = exterior.clone();
                 all.insert(i);
-                assert!(MemArea::non_overlapping_set(&all));
+                assert!(MemArea::non_overlapping_set(all));
             }
         }
 
         #[test]
         fn byte_slices((s1, s2, s3) in set_of_slices_strat(12, 34, 56)) {
-            let all = memset(&[s1, s2, s3]);
-            assert!(MemArea::non_overlapping_set(&all));
+            let all = MemSet::from(&[s1, s2, s3]);
+            assert!(MemArea::non_overlapping_set(all));
         }
     }
 }
