@@ -66,7 +66,7 @@ pub(super) fn define_handle(
             }
         }
 
-        impl<'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
+        unsafe impl<'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
             fn validate(location: &wiggle_runtime::GuestPtr<'a, #ident>) -> Result<*mut #ident, wiggle_runtime::GuestError> {
                 use wiggle_runtime::GuestType;
                 let host_ptr =

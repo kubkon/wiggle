@@ -85,7 +85,7 @@ pub(super) fn define_struct(
         });
 
         quote! {
-            impl<'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
+            unsafe impl<'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
                 fn validate(location: &wiggle_runtime::GuestPtr<'a, Self>) -> Result<*mut #ident, wiggle_runtime::GuestError> {
                     use wiggle_runtime::GuestType;
                     let ptr =

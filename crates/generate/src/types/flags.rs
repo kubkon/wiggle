@@ -157,7 +157,7 @@ pub(super) fn define_flags(names: &Names, name: &witx::Id, f: &witx::FlagsDataty
                 #repr::write(&location.cast(), val)
             }
         }
-        impl <'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
+        unsafe impl <'a> wiggle_runtime::GuestTypeTransparent<'a> for #ident {
             fn validate(location: &wiggle_runtime::GuestPtr<'a, Self>) -> Result<*mut #ident, wiggle_runtime::GuestError> {
                 let (validate, _) = Self::validate_read(location)?;
                 Ok(validate)
