@@ -373,7 +373,7 @@ impl<'a, T> GuestPtr<'a, [T]> {
     }
 
     /// Attempts to read a raw `*mut [T]` pointer from this pointer, performing
-    /// bounds checks and utf-8 checks.
+    /// bounds checks and type validation.
     /// The resulting `*mut [T]` can be used as a `&mut [t]` as long as the
     /// reference is dropped before any Wasm code is re-entered.
     ///
