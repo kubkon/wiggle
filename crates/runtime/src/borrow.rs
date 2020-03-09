@@ -1,5 +1,5 @@
 use crate::region::Region;
-use crate::GuestError;
+use crate::{GuestError, GuestPtr, GuestType};
 
 #[derive(Debug)]
 pub struct GuestBorrows {
@@ -17,13 +17,26 @@ impl GuestBorrows {
         !self.borrows.iter().all(|b| !b.overlaps(r))
     }
 
-    pub fn borrow(&mut self, r: Region) -> Result<(), GuestError> {
+    pub(crate) fn borrow(&mut self, r: Region) -> Result<(), GuestError> {
         if self.is_borrowed(r) {
             Err(GuestError::PtrBorrowed(r))
         } else {
             self.borrows.push(r);
             Ok(())
         }
+    }
+
+    /// Borrow the region of memory pointed to by a `GuestPtr`. This is required for safety if
+    /// you are dereferencing `GuestPtr`s while holding a reference to a slice via
+    /// `GuestPtr::as_raw`.
+    pub fn borrow_pointee<'a, T>(&mut self, p: &GuestPtr<'a, T>) -> Result<(), GuestError>
+    where
+        T: GuestType<'a>,
+    {
+        self.borrow(Region {
+            start: p.offset(),
+            len: T::guest_size(),
+        })
     }
 }
 
