@@ -129,12 +129,11 @@ impl crate::wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
 
         let mut bc = GuestBorrows::new();
         let mut slices: Vec<&'_ mut [u8]> = Vec::new();
+        // Mark the iov elements as borrowed, to ensure that they does not
+        // overlap with any of the as_raw regions.
+        bc.borrow_slice(&iovs).expect("borrow iovec array");
         for iov_ptr in iovs.iter() {
             let iov_ptr = iov_ptr.expect("iovec element pointer is valid");
-            // Mark the iov element as borrowed, to ensure that it does not
-            // overlap with any of the as_raw regions.
-            bc.borrow_pointee(&iov_ptr)
-                .expect("borrow iovec array member");
 
             let iov: types::Iovec = iov_ptr.read().expect("read iovec element");
             let base: GuestPtr<u8> = iov.buf;
