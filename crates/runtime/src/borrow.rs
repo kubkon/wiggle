@@ -38,6 +38,28 @@ impl GuestBorrows {
             len: T::guest_size(),
         })
     }
+
+    /// Borrow the slice of memory pointed to by a `GuestPtr<[T]>`. This is required for safety if
+    /// you are dereferencing the `GuestPtr`s while holding a reference to another slice via
+    /// `GuestPtr::as_raw`. Not required if using `GuestPtr::as_raw` on this pointer.
+    pub fn borrow_slice<'a, T>(&mut self, p: &GuestPtr<'a, [T]>) -> Result<(), GuestError>
+    where
+        T: GuestType<'a>,
+    {
+        let (start, elems) = p.offset();
+        let len = T::guest_size()
+            .checked_mul(elems)
+            .ok_or_else(|| GuestError::PtrOverflow)?;
+        self.borrow(Region { start, len })
+    }
+
+    /// Borrow the slice of memory pointed to by a `GuestPtr<str>`. This is required for safety if
+    /// you are dereferencing the `GuestPtr`s while holding a reference to another slice via
+    /// `GuestPtr::as_raw`. Not required if using `GuestPtr::as_raw` on this pointer.
+    pub fn borrow_str(&mut self, p: &GuestPtr<str>) -> Result<(), GuestError> {
+        let (start, len) = p.offset();
+        self.borrow(Region { start, len })
+    }
 }
 
 #[cfg(test)]
